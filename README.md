@@ -119,5 +119,6 @@ This will produce the plot below
 - matplotlib
 - pyqsp
 - scipy
+- tabulate
 
-numpy, matplotlib and scipy can be installed using pip install, but pyqsp should be downloaded from the GitHub repository https://github.com/ichuang/pyqsp and placed in the working directory.
+numpy, matplotlib, tabulate and scipy can be installed using pip install, but pyqsp should be downloaded from the GitHub repository https://github.com/ichuang/pyqsp and placed in the working directory.
