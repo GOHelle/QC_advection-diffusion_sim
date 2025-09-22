@@ -6,15 +6,9 @@ from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
 from tabulate import tabulate
 from typing import Union
-
-# if the test file is added outside the folder
-#from Adv_Diff import Adv_Diff_QC
-#from Adv_Diff.Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
-#from Adv_Diff.Fourier import Fourier_coef, Fourier_approx
-
-import Adv_Diff_QC
-from Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
-from Fourier import Fourier_coef, Fourier_approx
+from Adv_Diff import Adv_Diff_QC
+from Adv_Diff.Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
+from Adv_Diff.Fourier import Fourier_coef, Fourier_approx
 
 """
 This module provides a quantum simulation method to approximate the solution of the advection-diffusion equation.
@@ -182,11 +176,11 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         max_err = []
         if plot != "sv":
             max_err_meas = np.max(np.abs(z - w))
-            print(f"max error from measurement: {max_err_meas}")
+            print(f"Max error from measurement: {max_err_meas}")
             max_err.append(max_err_meas)
         if plot != "meas":
             max_err_sv = np.max(np.abs(W - w))
-            print(f"max error from statevector: {max_err_sv}\n")
+            print(f"Max error from statevector: {max_err_sv}\n")
             max_err.append(max_err_sv)
         max_err_list.append(max_err)
 
@@ -217,10 +211,10 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
             if plot != "sv" and Complexity: row.extend(complexity_list[i][0:2])
             table.append(row)
 
-        if plot == "both": headers += ["meas max error","sv max error"]
+        if plot == "both": headers += ["Measurement max error","Statevector max error"]
         elif plot == "meas": headers += ["meas max error"]
         else: headers += ["sv max error"]
-        if plot != "sv" and Complexity: headers += ["1q gates","2q gates"]
+        if plot != "sv" and Complexity: headers += ["1-qubit gates","2-qubit gates"]
 
         print(tabulate(table,headers=headers,tablefmt="simple_grid"))
 
@@ -233,5 +227,3 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         plt.show()
     
     return x, init_f(x), z_list, w_list, W_list, max_err_list, complexity_list
-
-#Sim(6, [0.5, 1], 1, 0.1, plot = "both")
