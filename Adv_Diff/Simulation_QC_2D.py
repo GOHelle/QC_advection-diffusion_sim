@@ -4,14 +4,11 @@ import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
 from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
-# if the test file is added outside the folder
-#from Adv_Diff import Adv_Diff_QC
-#from Adv_Diff.Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
-#from Adv_Diff.Fourier import Fourier_coef_2d, Fourier_approx_2d
+from typing import Union
+from Adv_Diff import Adv_Diff_QC
+from Adv_Diff.Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
+from Adv_Diff.Fourier import Fourier_coef_2d, Fourier_approx_2d
 
-import Adv_Diff_QC
-from Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
-from Fourier import Fourier_coef_2d, Fourier_approx_2d
 
 """
 This module provides a quantum simulation method to approximate the solution of the 2D advection-diffusion equation.
@@ -21,7 +18,8 @@ spatial domain under advection-diffusion dynamics. It compares the quantum-based
 defined in `Fourier.py`. It visualizes the initial condition, exact solution, and quantum solution via 3D surface plots.
 """
 
-def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lambda X, Y: np.sin(np.pi * (0.5 * X + Y))**2, shots:int=10**7, Complexity:bool=True, order:int = 2, eps=10**(-6)):
+def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lambda X, Y: np.sin(np.pi * (0.5 * X + Y))**2, 
+        shots:int=10**7, Complexity:bool=True, order:int = 2, eps:float=10**(-6), plot:Union[bool, str]="both"):
     """ Quantum simulation of the 2D advection-diffusion equation via QSVT and comparison to classical Fourier approximation.
 
     This function constructs and runs quantum circuits to simulate the evolution of a 2D initial function 
@@ -41,16 +39,22 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         Complexity: If True, prints 1-qubit, 2-qubit gate counts, total gates, and circuit depth.
         order: Order of the QSVT method (2, 4, or 6).
         eps: Tolerance parameter used for angle calculations.
+        plot: If plot="sv", statevector simulation is performed and plotted. If plot="meas", measurement is performed, and the results are plotted. 
+              If plot="both", both simulations are perforemd and plotted. If plot=False, both simulations are performed but neither is plotted.
 
     Outputs:
         - 3D surface plots of the initial condition, exact solution, and quantum solution at final time T. 
-          The sucess rate and maximal error are also displayed
-        - Prints gate counts and circuit depth if `Complexity=True`.
+        - Gate counts and circuit depth if `Complexity=True`.
+        - Success rate of postselection from measurements.
+        - Max errors between quantum and exact solutions.
 
     Returns:
-        init_vals: inital condition over space discretization
-        exact: fourier approximation
-        z: quantum solution
+        init_vals: Inital condition over space discretization
+        exact: Fourier approximation
+        z: Measurement quantum solution. If plot ="sv", z = None
+        W: Statevector quantum solution. If plot ="meas", W = None
+        max_err: List of maximum errors from measurement and statevector solutions
+        Complexity: List of complexity data [1-qubit gates, 2-qubit gates, total gates, circuit depth]. If Complexity=False, Complexity = None
 
     Notes:
         - For each direction: if c=0, only diffusion is performed; if nu=0, only advection is performed; 
@@ -121,43 +125,56 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     qsvt2= build_qsvt(method2, M_adv2)  # QSVT evoultion in y direction
     qc.append(qsvt2, qr_anc[anc1:] + qr[n:])
 
+    # Statevector simulation
+    W = None
+    if plot != "meas":
+        sv = Statevector.from_instruction(qc)
+        W = 4*np.asarray(sv.data).reshape(N, N, 2**anc)[:, :, 0]
+        # Rescale according to method
+        W /= adv_scale if method1 == "pure_adv" else (2 * diff_scale if method1 == "pure_diff" else 1)
+        W /= adv_scale if method2 == "pure_adv" else (2 * diff_scale if method2 == "pure_diff" else 1)
+
     # Measurements
-    qc.measure(qr_anc,cr_anc)
-    qc.measure(qr,cr)
+    z  = None
+    complexity = None
+    if plot != "sv":
+        qc.measure(qr_anc,cr_anc)
+        qc.measure(qr,cr)
 
-    # Running the circuit 
-    sim = AerSimulator()
-    qc_comp = transpile(qc,sim)
-    res = sim.run(qc_comp,shots = shots).result()
-    counts = res.get_counts(0)
+        # Running the circuit 
+        sim = AerSimulator()
+        qc_comp = transpile(qc,sim)
+        res = sim.run(qc_comp,shots = shots).result()
+        counts = res.get_counts(0)
 
-    # Postselection
-    z = np.zeros([N, N])
-    total = 0
-    anc_bits = '0' * anc
+        # Postselection
+        z = np.zeros([N, N])
+        total = 0
+        anc_bits = '0' * anc
 
-    for key, val in counts.items():
-        L = key.split()
-        if L[1] == anc_bits:
-            bitstring = L[0]
-            i = int(bitstring[:n], 2)
-            j = int(bitstring[n:], 2)
-            z[i, j] = np.sqrt(val / shots) * 4
-            total += val
+        for key, val in counts.items():
+            L = key.split()
+            if L[1] == anc_bits:
+                bitstring = L[0]
+                i = int(bitstring[:n], 2)
+                j = int(bitstring[n:], 2)
+                z[i, j] = np.sqrt(val / shots) * 4
+                total += val
 
-    success_rate = total / shots
-    print(f"-- SUCCESS RATE -- \n succes rate of postselection: {success_rate}\n ")
-    
-    # Rescale
-    z /= adv_scale if method1 == "pure_adv" else (2 * diff_scale if method1 == "pure_diff" else 1)
-    z /= adv_scale if method2 == "pure_adv" else (2 * diff_scale if method2 == "pure_diff" else 1)
+        success_rate = total / shots
+        print(f"\n-- SUCCESS RATE -- \n succes rate of postselection: {success_rate} ")
+        
+        # Rescale
+        z /= adv_scale if method1 == "pure_adv" else (2 * diff_scale if method1 == "pure_diff" else 1)
+        z /= adv_scale if method2 == "pure_adv" else (2 * diff_scale if method2 == "pure_diff" else 1)
 
-    if Complexity:
-        dict = qc_comp.count_ops()
-        gate_1q = sum(v for k, v in dict.items() if k[0] != 'c' and k != 'measure')
-        gate_2q = sum(v for k, v in dict.items() if k[0] == 'c')
-        print(f"\n-- COMPLEXITY--\n1 qubit gates: {gate_1q}\n2 qubit gates: {gate_2q}")
-        print(f"Total: {gate_1q+gate_2q}\nCircuit depth after transpiling:{qc_comp.depth()}\n")
+        if Complexity:
+            dict = qc_comp.count_ops()
+            gate_1q = sum(v for k, v in dict.items() if k[0] != 'c' and k != 'measure')
+            gate_2q = sum(v for k, v in dict.items() if k[0] == 'c')
+            print(f"\n-- COMPLEXITY--\n1 qubit gates: {gate_1q}\n2 qubit gates: {gate_2q}")
+            print(f"Total: {gate_1q+gate_2q}\nCircuit depth after transpiling:{qc_comp.depth()}\n")
+            complexity = [gate_1q, gate_2q, gate_1q + gate_2q, qc_comp.depth()]
 
     # Exact solution
     f_scaled = lambda x, y: init_f(x, y) / norm
@@ -167,37 +184,62 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     else:  # pure advection
         exact = f_scaled((X - c1 * T) % d, (Y - c2 * T) % d)
 
-    max_err = np.max(np.abs(z - exact))  # compute maximal error between quantum result and exact solution
+    # Max error
+    print(f"-- MAX ERROR --")
+    max_err = []
+    if plot != "sv": 
+        max_err.append(np.max(np.abs(z - exact)))
+        print(f"Max error from measurement: {max_err[-1]}")
+    if plot != "meas": 
+        max_err.append(np.max(np.abs(W - exact)))
+        print(f"Max error from statevector: {max_err[-1]}")
 
     # Plotting
-    fig = plt.figure(figsize=(20, 8))
+    if plot:
+        fig = plt.figure(figsize=(20, 8))
 
-    z_min = min(np.min(init_vals), np.min(exact), np.min(z))  # compute global min/max
-    z_max = max(np.max(init_vals), np.max(exact), np.max(z))
-    x_min, x_max = np.min(X), np.max(X)
-    y_min, y_max = np.min(Y), np.max(Y)
+        z_min_init = np.min(init_vals)
+        z_max_init = np.max(init_vals)
+        z_min_exact = np.min(exact)
+        z_max_exact = np.max(exact)
+        z_min_W, z_max_W = (np.min(W), np.max(W)) if plot != "meas" else (None, None)
+        z_min_z, z_max_z = (np.min(z), np.max(z)) if plot != "sv" else (None, None)
+        x_min, x_max = np.min(X), np.max(X)
+        y_min, y_max = np.min(Y), np.max(Y)
 
-    titles = ["T = 0", f"Exact solution at T = {T}", f"Quantum result at T = {T}\nSuccess rate = {success_rate:.3f}\nMax error = {max_err:.6e}", ]
-    data = [init_vals, exact, z]
+        data = [init_vals, exact]
+        titles = ["Initial condition", f"Exact solution at T = {T}"]
 
-    for i, (title, Z) in enumerate(zip(titles, data), start=1):
-        ax = fig.add_subplot(1, 3, i, projection='3d')
-        ax.plot_surface(X, Y, Z, cmap='viridis')
-        ax.set_title(title)
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('u')
+        if plot != "meas": 
+            data.append(W.real)
+            titles.append(f"Statevector solution at T={T}")
+        if plot != "sv":
+            data.append(z)
+            titles.append(f"Measurement solution at T={T}")
 
-        # Fix axes limits
-        ax.set_xlim(x_min, x_max)
-        ax.set_ylim(y_min, y_max)
-        ax.set_zlim(z_min, z_max)
+        for i, (title, Z) in enumerate(zip(titles, data), start=1):
+            ax = fig.add_subplot(1, len(data), i, projection='3d')
+            ax.plot_surface(X, Y, Z, cmap='viridis')
+            ax.set_title(title)
+            ax.set_xlabel('x')
+            ax.set_ylabel('y')
+            ax.set_zlabel('u')
 
-    fig.suptitle(f"n = {n},    c1 = {c1},    c2 = {c2},    nu = {nu},    shots = 10^{int(np.log10(shots))}")
-    plt.tight_layout()
-    plt.show()
+            if title == "Statevector solution":
+                ax.set_zlim(z_min_W, z_max_W)
+            elif title == "Measurement solution":
+                ax.set_zlim(z_min_z, z_max_z)
+            else:
+                ax.set_zlim(min(z_min_init, z_min_exact), max(z_max_init, z_max_exact))
 
-    return init_vals, exact, z
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
 
-# Run 2D simulation with specified parameters. 
-#Sim(5, 1, 1, 2, 0.1, order = 6)
+        if nu == 0: title_str = rf"2D Advection with Parameters; $n = {n},\ c_1 = {c1},\ c_2 = {c2},\ order = {order}$"
+        elif c1 == 0 and c2 == 0: title_str = rf"2D Diffusion with Parameters; $n = {n},\ \nu = {nu},\ order = {order}$"
+        else: title_str = rf"2D Advection-Diffusion with Parameters; $n = {n},\ c_1 = {c1},\ c_2 = {c2},\ \nu = {nu},\ order= {order}$"
+        fig.suptitle(title_str, fontsize=16)
+        plt.tight_layout()
+        plt.show()
+
+    return init_vals, exact, z, W, max_err, Complexity
