@@ -45,45 +45,49 @@ The repository is organized into a small number of Python modules, each handling
   - Chooses a time discretization which normalizes the block encoding. 
   - selects the least number of ancilla qubits necessary for the given case and method order.
   - Constructs the appropriate QSVT circuit and postselects on ancilla measurements to extract the solution.  
-  - plots the quantum results against the Fourier approximation and reports maximal error and success probability for each given final time.
+  - plots the quantum results against the Fourier approximation and reports maximal error and success probability 
+    for each given final time, as well as gate count if intructed to.
 
 - **`Simulation_QC_2D.py`**  
   Extends the simulation framework to 2D  
   - Assigns equal numbers of qubits to each spatial direction.  
   - Constructs QSVT circuits separately for each direction, roughly doubling the ancilla requirements compared to 1D.  
   - Produces 3D surface plots of the initial condition, Fourier approximation, and quantum result at the final time.  
-  - Reports maximal error and success probability. 
+  - Reports maximal error, success probability, and gate count if instructed to. 
 
 ## Examples
-To use the repository for simulating advection-diffusion in either 1D or 2D, import Simulation_QC or Simulation_QC_2D, and run the Sim() method from the repsective file with your intended parameters specified. See the examples below. 
+To use the repository for simulating advection-diffusion in either 1D or 2D, place the Adv_Diff folder in your working directory, import Simulation_QC or Simulation_QC_2D in your file, and run the Sim() method from the repsective file with your intended parameters specified. See the examples below. 
 
 #### 1D Simulation Example
 
 ```python
 # Import relevant modules and methods.
 import numpy as np
-from Adv_Diff_new import Simulation_QC
+from Adv_Diff import Simulation_QC
 
 # specify parameters for 1D simulation
 n = 6                                       # Number of spatial qubits
 T = [0.25, 0.5, 0.75]                       # List of final times (could also be a single value)
-c = 1                                       # Advection speed parameter
-nu = 0.05                                   # Diffusion coefficient
+c = 2                                       # Advection speed parameter
+nu = 0.1                                    # Diffusion coefficient
 d = 4                                       # Length of spatial domain
 init_f = lambda x: np.exp(-10*(x-4/3)**2)   # Initial function
 shots = 10**6                               # Number of measurement shots
 Complexity = True                           # Whether or not to display complexity data
-order = 6                                   # Method order
+order = 4                                   # Method order
 eps = 10**(-6)                              # error tolerance when deriving angle sequences
-
+plot = "both"                               # Plot measurement results, statevector results, both, or none ("meas", "sv", "both", or False)
 
 # Run 1D simulation with specified parameters. 
-Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps)
+Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, plot)
 ```
 
 This will produce the plot below
 
-![Example 1](example_1.png)
+![Example 1](1D_example.png)
+
+For each value in T, it will also print the succes rate, complexity, max error and some information printed by pyqsp's solver. Each simulation is separated by a header stating the current value of T. Each section of printed information is also indicated by a clear header.
+When the simulation is complete for all the values in T, a table is displayed which summarises, the printed information.
 
 #### 2D Simulation Example
 
@@ -104,14 +108,17 @@ shots = 10**7                                               # Number of measurem
 Complexity = True                                           # Whether or not to display complexity data
 order = 2                                                   # Method order
 eps = 10**(-6)                                              # error tolerance when deriving angle sequences
+plot = "both"                                               # Plot measurement results, statevector results, both, or none ("meas", "sv", "both", or False)
 
 # Run 2D simulation with specified parameters. 
-Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps)
+Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, plot)
 ```
 
 This will produce the plot below
 
-![Example 2](example_2.png)
+![Example 2](2D_example.png)
+
+It will also print the succes rate, complexity, max error and some information printed by pyqsp's solver. Each section of printed information is indicated by a clear header.
 
 ## Dependencies
 
@@ -120,5 +127,6 @@ This will produce the plot below
 - pyqsp
 - scipy
 - tabulate
+- typing
 
-numpy, matplotlib, tabulate and scipy can be installed using pip install, but pyqsp should be downloaded from the GitHub repository https://github.com/ichuang/pyqsp and placed in the working directory.
+numpy, matplotlib, tabulate, typing and scipy can be installed using pip install, but pyqsp should be downloaded from the GitHub repository https://github.com/ichuang/pyqsp and placed in the working directory.
