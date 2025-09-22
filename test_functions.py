@@ -1,5 +1,5 @@
 import numpy as np
-import Simulation_QC
+from Adv_Diff import Simulation_QC
 import matplotlib.pyplot as plt
 from tabulate import tabulate
 from scipy.interpolate import interp1d
