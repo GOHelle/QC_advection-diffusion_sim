@@ -91,6 +91,15 @@ def plot_simulations(init_f, n=[6,6,6], orders = [2, 4, 6], T=0.5, c=1, nu=0.1, 
 
     axes[1].set_title(rf'Adv-Diff Simulation at Time $T =$ {T} with Parameters $c =$ {c} and $\nu =$ {nu}', fontsize=14)
     axes[1].legend()
+
+    # Adding the table to the plot
+    headers=['', 'Error (m)', 'Error (sv)', '1Q gates', 'CNOT gates']
+    axes[2].axis('off')
+    tbl = axes[2].table(cellText = table, colLabels = headers, loc = 'center')
+    tbl.scale(1,2)
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(12)
+    axes[2].set_title('Data Table')
     plt.show()
 
 plot_simulations(Gaussian, n=[8,7,6], orders=[2, 4, 6], T=1, c=1, nu=0, plot="meas")
