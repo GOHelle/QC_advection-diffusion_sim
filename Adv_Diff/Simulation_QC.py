@@ -165,11 +165,12 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
 
             # Printing gate counts and circuit depth
             if Complexity:
-                ops = qc_comp.count_ops()
-                gate_1q = sum(v for k,v in ops.items() if k[0]!='c' and k!='measure')
-                gate_2q = sum(v for k,v in ops.items() if k[0]=='c')
-                complexity_list.append([gate_1q, gate_2q, gate_1q+gate_2q, qc_comp.depth()])
-                print(f"-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{qc_comp.depth()}\n")
+                tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
+                gts = tqc.count_ops()
+                gate_1q = gts['u']
+                gate_2q = gts['cx']
+                complexity_list.append([gate_1q, gate_2q, gate_1q+gate_2q, tqc.depth()])                   
+                print(f"-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
 
         # Max error
         print("-- MAX ERROR --")
