@@ -19,7 +19,7 @@ defined in `Fourier.py`.
 """
 
 def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: np.exp(-10*(x-4/3)**2), shots:int=10**6, 
-        Complexity:bool=True, order:int = 2, eps=10**(-6), plot:Union[bool, str]="both"):
+        Complexity:bool=True, order:int = 2, eps=10**(-6), sim_type: str="both", plot:bool=True):
     """ Quantum simulation of the advection-diffusion equation via QSVT and comparison to classical Fourier approximation.
 
     This function constructs and runs quantum circuits simulating the evolution of an initial function under
@@ -38,13 +38,13 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         Complexity: If True, prints number of 1-qubit gates, number of 2-qubit gates, total number of gates, and circuit depth after transpiling.
         order: Order of the method. Supported values are 2, 4, or 6.
         eps: Tolerance parameter used for angle calculations.
-        plot: If plot="sv", statevector simulation is performed and plotted. If plot="meas", measurement is performed, and the results are plotted. 
-              If plot="both", both simulations are perforemd and plotted. If plot=False, both simulations are performed but neither is plotted.
+             sim_type: If sim_type="sv", statevector simulation is performed, if sim_type="meas", measurement is performed, and if sim_type="both", both simulations are performed.
+        plot: If True, plots the initial condition and the quantum and Fourier solutions for each value in T.
 
     Outputs:
-        - A matplotlib figure with subplots for the initial condition and a comparison plot (quantum vs Fourier) for each final time value in T.
+        - A matplotlib figure with subplots for the initial condition and a comparison plot (quantum vs Fourier) for each final time value in T if plot = True.
         - gate counts and transpiled circuit depth if `Complexity=True`.
-        - success rate of the postselection
+        - success rate of the postselection if measurement is performed.
         - Max error value(s)
         - A table summarizing all the printed outputs for each value in T.
 
@@ -70,6 +70,7 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     T = T[T != 0]  # Remove any zero entries
     if c == 0 and nu == 0: sys.exit("Error: c and nu cannot both be 0")
     if order not in [2,4,6]: sys.exit("Error: The order should be either 2, 4 or 6")
+    if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: plot should be either sv', 'meas' or 'both'")
 
     # Identify which PDE evolution type applies
     method = "pure_diff" if c==0 else "pure_adv" if nu==0 else "adv_diff"
@@ -100,7 +101,7 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     g = Fourier_approx(*Fourier_coef(init_f,1e-5,d),d)
 
     # For storing solution values to return
-    z_list, w_list, W_list, max_err_list, complexity_list = [], [], [], [], []
+    z_list, w_list, W_list, max_err_list, success_rate_list, complexity_list = [], [], [], [], [], []
 
     # Preparing plot
     if plot:
@@ -134,14 +135,14 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         w_list.append(w)
 
         # State vector simulation
-        if plot != "meas":
+        if sim_type != "meas":
             sv = Statevector.from_instruction(qc)
             W = np.asarray(sv.data).reshape(2**n, 2**anc)[:,0]
             W *= 2*norm_y/(0.95 if method=="pure_adv" else 2*0.95 if method=="pure_diff" else 1)    
             W_list.append(W)
 
         # Measurement simulation
-        if plot != "sv":
+        if sim_type != "sv":
             qc.measure(qr_anc,cr_anc)
             qc.measure(qr,cr)
             sim = AerSimulator()
@@ -161,6 +162,7 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
                     total += counts[key] 
             z_list.append(z)
             success_rate = total/shots
+            success_rate_list.append(success_rate)
             print(f"\n-- SUCCESS RATE -- \n succes rate of postselection: {success_rate}\n ")
 
             # Printing gate counts and circuit depth
@@ -175,11 +177,11 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         # Max error
         print("-- MAX ERROR --")
         max_err = []
-        if plot != "sv":
+        if sim_type != "sv":
             max_err_meas = np.max(np.abs(z - w))
             print(f"Max error from measurement: {max_err_meas}")
             max_err.append(max_err_meas)
-        if plot != "meas":
+        if sim_type != "meas":
             max_err_sv = np.max(np.abs(W - w))
             print(f"Max error from statevector: {max_err_sv}\n")
             max_err.append(max_err_sv)
@@ -194,9 +196,9 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
                 plt.ylim(y_min-0.05, y_max+0.05)
                 plt.title(rf"Inital Condition")
             plt.subplot(num_plots,1,i+2)
-            if plot != "sv": plt.plot(x, z, label="Quantum measurements")
-            if plot != "meas": plt.plot(x, W.real, label="Quantum statevector")
-            plt.plot(x,w,label="Fourier")
+            if sim_type != "sv": plt.plot(x, z, label="Quantum measurements")
+            if sim_type != "meas": plt.plot(x, W.real, label="Quantum statevector")
+            plt.plot(x,w,label="Exact (fourier)")
             plt.ylim(y_min-0.05,y_max+0.05)
             plt.title(f"T={T[i]}")
             plt.legend()
@@ -207,15 +209,17 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         table, headers = [], ["T"]
         for i,t in enumerate(T):
             row = [t]
-            if plot != "sv": row.append(max_err_list[i][0])
-            if plot != "meas": row.append(max_err_list[i][-1])
-            if plot != "sv" and Complexity: row.extend(complexity_list[i][0:2])
+            row.append(max_err_list[i][0])
+            if sim_type != "sv":
+                row.append(success_rate_list[i])
+                if Complexity: row.extend(complexity_list[i][0:2])
             table.append(row)
 
-        if plot == "both": headers += ["Measurement max error","Statevector max error"]
-        elif plot == "meas": headers += ["meas max error"]
+        if sim_type == "meas": headers += ["meas max error"]
         else: headers += ["sv max error"]
-        if plot != "sv" and Complexity: headers += ["1-qubit gates","2-qubit gates"]
+        if sim_type != "sv":
+            headers += ["success rate"]
+            if Complexity: headers += ["1-qubit gates","2-qubit gates"]
 
         print(tabulate(table,headers=headers,tablefmt="simple_grid"))
 
@@ -227,4 +231,4 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         plt.tight_layout()
         plt.show()
     
-    return x, init_f(x), z_list, w_list, W_list, max_err_list, complexity_list
+    return x, init_f(x), z_list, w_list, W_list, max_err_list, success_rate_list, complexity_list

@@ -19,7 +19,7 @@ defined in `Fourier.py`. It visualizes the initial condition, exact solution, an
 """
 
 def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lambda X, Y: np.sin(np.pi * (0.5 * X + Y))**2, 
-        shots:int=10**7, Complexity:bool=True, order:int = 2, eps:float=10**(-6), plot:Union[bool, str]="both"):
+        shots:int=10**7, Complexity:bool=True, order:int = 2, eps:float=10**(-6), sim_type:str="both", plot:bool=True):
     """ Quantum simulation of the 2D advection-diffusion equation via QSVT and comparison to classical Fourier approximation.
 
     This function constructs and runs quantum circuits to simulate the evolution of a 2D initial function 
@@ -39,28 +39,28 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         Complexity: If True, prints 1-qubit, 2-qubit gate counts, total gates, and circuit depth.
         order: Order of the QSVT method (2, 4, or 6).
         eps: Tolerance parameter used for angle calculations.
-        plot: If plot="sv", statevector simulation is performed and plotted. If plot="meas", measurement is performed, and the results are plotted. 
-              If plot="both", both simulations are perforemd and plotted. If plot=False, both simulations are performed but neither is plotted.
+        sim_type: If sim_type="sv", statevector simulation is performed, if sim_type="meas", measurement is performed, and if sim_type="both", both simulations are performed.
+        plot: If True, plots the initial condition and the quantum and Fourier solutions.
 
     Outputs:
-        - 3D surface plots of the initial condition, exact solution, and quantum solution at final time T. 
-        - Gate counts and circuit depth if `Complexity=True`.
+        - 3D surface plots of the initial condition, exact solution, and quantum solution at final time T if plot = True. 
+        - Gate counts and circuit depth if Complexity=True.
         - Success rate of postselection from measurements.
         - Max errors between quantum and exact solutions.
 
     Returns:
         init_vals: Inital condition over space discretization
         exact: Fourier approximation
-        z: Measurement quantum solution. If plot ="sv", z = None
-        W: Statevector quantum solution. If plot ="meas", W = None
+        z: Measurement quantum solution. If sim_type ="sv", z = None
+        W: Statevector quantum solution. If sim_type ="meas", W = None
         max_err: List of maximum errors from measurement and statevector solutions
-        Complexity: List of complexity data [1-qubit gates, 2-qubit gates, total gates, circuit depth]. If Complexity=False, Complexity = None
+        complexity: List of complexity data [1-qubit gates, 2-qubit gates, total gates, circuit depth]. If Complexity=False, Complexity = None
 
     Notes:
         - For each direction: if c=0, only diffusion is performed; if nu=0, only advection is performed; 
           if neither is zero, the QSVT for combined advection-diffusion is applied.
         - The number of ancilla qubits is chosen automatically based on the type of evolutions in each direction and the QSVT order.
-        - Postselection on ancillary measurements is performed to extract the quantum output. The success rate is displayed in the plot.
+        - Postselection on ancillary measurements is performed to extract the quantum output. The success rate is printed.
     """
 
     N = 2**n  
@@ -77,6 +77,7 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         sys.exit("Error: if nu=0, c1 or c2 should be nonzero, to avoid 1d evoultion")
     if order not in [2,4,6]:
         sys.exit("Error: The order should be either 2, 4 or 6")
+    if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: plot should be either sv', 'meas' or 'both'")
 
     # Computing time-evoultion parameter M
     dt_factors = {2: 1, 4: 3/2, 6: 11/6}
@@ -127,7 +128,7 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
 
     # Statevector simulation
     W = None
-    if plot != "meas":
+    if sim_type != "meas":
         sv = Statevector.from_instruction(qc)
         W = 4*np.asarray(sv.data).reshape(N, N, 2**anc)[:, :, 0]
         # Rescale according to method
@@ -136,8 +137,7 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
 
     # Measurements
     z  = None
-    complexity = None
-    if plot != "sv":
+    if sim_type != "sv":
         qc.measure(qr_anc,cr_anc)
         qc.measure(qr,cr)
 
@@ -168,13 +168,14 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         z /= adv_scale if method1 == "pure_adv" else (2 * diff_scale if method1 == "pure_diff" else 1)
         z /= adv_scale if method2 == "pure_adv" else (2 * diff_scale if method2 == "pure_diff" else 1)
 
+        # Printing gate counts and circuit depth
         if Complexity:
-            dict = qc_comp.count_ops()
-            gate_1q = sum(v for k, v in dict.items() if k[0] != 'c' and k != 'measure')
-            gate_2q = sum(v for k, v in dict.items() if k[0] == 'c')
-            print(f"\n-- COMPLEXITY--\n1 qubit gates: {gate_1q}\n2 qubit gates: {gate_2q}")
-            print(f"Total: {gate_1q+gate_2q}\nCircuit depth after transpiling:{qc_comp.depth()}\n")
-            complexity = [gate_1q, gate_2q, gate_1q + gate_2q, qc_comp.depth()]
+            tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
+            gts = tqc.count_ops()
+            gate_1q = gts['u']
+            gate_2q = gts['cx']                  
+            print(f"\n-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
+            complexity = [gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()]
 
     # Exact solution
     f_scaled = lambda x, y: init_f(x, y) / norm
@@ -187,10 +188,10 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     # Max error
     print(f"-- MAX ERROR --")
     max_err = []
-    if plot != "sv": 
+    if sim_type != "sv": 
         max_err.append(np.max(np.abs(z - exact)))
         print(f"Max error from measurement: {max_err[-1]}")
-    if plot != "meas": 
+    if sim_type != "meas": 
         max_err.append(np.max(np.abs(W - exact)))
         print(f"Max error from statevector: {max_err[-1]}")
 
@@ -202,18 +203,18 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         z_max_init = np.max(init_vals)
         z_min_exact = np.min(exact)
         z_max_exact = np.max(exact)
-        z_min_W, z_max_W = (np.min(W), np.max(W)) if plot != "meas" else (None, None)
-        z_min_z, z_max_z = (np.min(z), np.max(z)) if plot != "sv" else (None, None)
+        z_min_W, z_max_W = (np.min(W), np.max(W)) if sim_type != "meas" else (None, None)
+        z_min_z, z_max_z = (np.min(z), np.max(z)) if sim_type != "sv" else (None, None)
         x_min, x_max = np.min(X), np.max(X)
         y_min, y_max = np.min(Y), np.max(Y)
 
         data = [init_vals, exact]
         titles = ["Initial condition", f"Exact solution at T = {T}"]
 
-        if plot != "meas": 
+        if sim_type != "meas": 
             data.append(W.real)
             titles.append(f"Statevector solution at T={T}")
-        if plot != "sv":
+        if sim_type != "sv":
             data.append(z)
             titles.append(f"Measurement solution at T={T}")
 
@@ -242,4 +243,4 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         plt.tight_layout()
         plt.show()
 
-    return init_vals, exact, z, W, max_err, Complexity
+    return init_vals, exact, z, W, max_err, complexity
