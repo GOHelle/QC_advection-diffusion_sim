@@ -14,10 +14,11 @@ shots = 10**6                               # Number of measurement shots
 Complexity = True                           # Whether or not to display complexity data
 order = 4                                   # Method order
 eps = 10**(-6)                              # error tolerance when deriving angle sequences
-plot = "both"                               # Plot measurement results, statevector results, both, or none ("meas", "sv", "both", or False)
+sim_type  = "both"                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
+plot = True                                 # Whether or not to plot results
 
 # Run 1D simulation with specified parameters. 
-Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, plot)
+Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, sim_type, plot)
 
 # specify parameters for 2D simulation
 n = 5                                                       # Number of qubits per spatial dimension
@@ -31,7 +32,8 @@ shots = 10**7                                               # Number of measurem
 Complexity = True                                           # Whether or not to display complexity data
 order = 2                                                   # Method order
 eps = 10**(-6)                                              # error tolerance when deriving angle sequences
-plot = "both"                                               # Plot measurement results, statevector results, both, or none ("meas", "sv", "both", or False)
+sim_type  = "both"                                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
+plot = True                                                 # Whether or not to plot results
 
 # Run 2D simulation with specified parameters. 
-Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, plot)
+Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, sim_type, plot)

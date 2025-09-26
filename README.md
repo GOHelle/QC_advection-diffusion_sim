@@ -76,10 +76,11 @@ shots = 10**6                               # Number of measurement shots
 Complexity = True                           # Whether or not to display complexity data
 order = 4                                   # Method order
 eps = 10**(-6)                              # error tolerance when deriving angle sequences
-plot = "both"                               # Plot measurement results, statevector results, both, or none ("meas", "sv", "both", or False)
+sim_type  = "both"                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
+plot = True                                 # Whether or not to plot results
 
 # Run 1D simulation with specified parameters. 
-Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, plot)
+Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, sim_type, plot)
 ```
 
 This will produce the plot below
@@ -108,10 +109,11 @@ shots = 10**7                                               # Number of measurem
 Complexity = True                                           # Whether or not to display complexity data
 order = 2                                                   # Method order
 eps = 10**(-6)                                              # error tolerance when deriving angle sequences
-plot = "both"                                               # Plot measurement results, statevector results, both, or none ("meas", "sv", "both", or False)
+sim_type  = "both"                                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
+plot = True                                                 # Whether or not to plot results
 
 # Run 2D simulation with specified parameters. 
-Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, plot)
+Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, sim_type, plot)
 ```
 
 This will produce the plot below
@@ -129,4 +131,7 @@ It will also print the succes rate, complexity, max error and some information p
 - tabulate
 - typing
 
-numpy, matplotlib, tabulate, typing and scipy can be installed using pip install, but pyqsp should be downloaded from the GitHub repository https://github.com/ichuang/pyqsp and placed in the working directory.
+All of the above can simply be installed using pip install.
+For details on the pyqsp package see https://github.com/ichuang/pyqsp
+
+This code uses qiskit version 2.0.2 and qiskit-aer version 17.0. Currently there are some issues with newer versions of qiskit. 
