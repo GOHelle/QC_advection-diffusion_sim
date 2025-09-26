@@ -140,7 +140,7 @@ def JA_2exp(M:float,deg):
     """
     coef = np.zeros(deg +1)
     z = 1j*M/2
-    coef[0] = jv(0,z).real
+    coef[0] = jv(0,z).real   # this part overflows for large values
     for n in range(2,deg+1,2):
         c = 2*1j**(n/2)*jv(int(n/2),z)
         coef[n] = c.real
@@ -247,7 +247,7 @@ def min_R(eps:float, M:float, func_type:str='exp'):
             coeffs = JA_2exp(M, 2*R+1)
         approx = np.polynomial.chebyshev.chebval(x_vals, coeffs)
         max_error = np.max(np.abs(f_vals - approx))
-        if max_error > eps:
+        if max_error > eps or (R == R_init and max_error <= eps):
             return R+1      
 
 def comb_exp(eps:float, M1:float, M2:float):
