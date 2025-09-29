@@ -73,7 +73,7 @@ def plot_simulations(init_f, n_order=[(6,2),(6,4),(6,6)], T=0.5, c=1, nu=0.1, sh
 
     # Create summary table
     table = [
-        [f"Order {orders[i]} (n={n[i]})", f"{max_err[0][0]:.3e}", f"{succ_rate[0]:.3e}", comp[0][0], comp[0][1]]
+        [f"Order {orders[i]} (n={n[i]})", f"{max_err[0][0]:.3e}", f"{succ_rate[0]:.4f}", comp[0][0], comp[0][1]]
         for i, (_, _, _, _, _, max_err, succ_rate, comp) in enumerate(results)]
     print(f"\n-- SUMMARY --")
     error_type = "m" if sim_type == "meas" else "sv"
@@ -86,7 +86,7 @@ def plot_simulations(init_f, n_order=[(6,2),(6,4),(6,6)], T=0.5, c=1, nu=0.1, sh
     axes[0].set_title(rf'Initial Condition', fontsize=14)
 
     # Plot all orders together
-    colors = ["r", "g", "m"]
+    colors = ["r", "g", "m", "c", "y"]
     for i in range(len(orders)):
         f0_interp, z_interp, w_interp, W_interp, _, _, _ = interp_results[i]
         if i == 0:
@@ -116,11 +116,16 @@ def plot_simulations(init_f, n_order=[(6,2),(6,4),(6,6)], T=0.5, c=1, nu=0.1, sh
     tbl.set_fontsize(12)
     axes[2].set_title('Data Table')
 
-    plt.suptitle(rf'Adv-Diff Simulation at Time $T =$ {T} with Parameters $c =$ {c} and $\nu =$ {nu}',fontsize=15)
+    plt.suptitle(rf'Advection-diffusion simulation at time $T =$ {T} with parameters $c =$ {c} and $\nu =$ {nu}',fontsize=15)
     plt.tight_layout()
+    plt.savefig('Wave_pack3.png')
     plt.show()
 
-plot_simulations(Gaussian, n_order=[(8,2),(7,4),(6,6)], T=1, c=1, nu=0.1, sim_type="both")
-#plot_simulations(Sine_sum, n=[7,7,7], T=3, c=1, nu=0, shots=10**7)
-#plot_simulations(Wave_pack, n=[8,8,8], T=0.5, c=1, nu=0, shots=10**7)
-#plot_simulations(Bump, n=[7,7,7], T=0.5, c=1, nu=0, shots=10**6)
+# plot_simulations(Gaussian, n_order=[(8,2),(6,6)], T=6, c=0, nu=0.02,shots = 10**6, sim_type="sv")
+# plot_simulations(Sine_sum, n_order=[(8,2),(7,6)], T=0.5, c=1, nu=0.1, shots=10**6, sim_type = "sv")
+# plot_simulations(Wave_pack, n_order=[(9,2),(7,6)], T=3, c=1, nu=0, shots=10**6,sim_type = "sv")
+# plot_simulations(Bump, n_order=[(8,2), (6,6)], T=0.6, c=0, nu=0.1, shots=10**6, sim_type = "sv")
+
+# plot_simulations(Gaussian, n_order=[(8,2),(6,6),(9,2),(7,6)], T=4, c=1, nu=0,shots = 10**6, sim_type="sv")
+
+
