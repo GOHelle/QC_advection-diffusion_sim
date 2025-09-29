@@ -1,7 +1,7 @@
 from pyqsp import angle_sequence, response
 import numpy as np
 from numpy.polynomial.chebyshev import Chebyshev, chebmul
-from scipy.special import jv
+from scipy.special import jv, jve
 from scipy.optimize import fsolve
 import matplotlib.pyplot as plt
 from typing import Callable
@@ -140,11 +140,10 @@ def JA_2exp(M:float,deg):
     """
     coef = np.zeros(deg +1)
     z = 1j*M/2
-    coef[0] = jv(0,z).real   # this part overflows for large values
+    coef[0] = jve(0,z).real
     for n in range(2,deg+1,2):
-        c = 2*1j**(n/2)*jv(int(n/2),z)
+        c = 2*1j**(n/2)*jve(int(n/2),z)
         coef[n] = c.real
-    coef = np.exp(-M/2)*coef 
     return coef 
 
 def JA_2exp_Angles(M: float, scale: float = 1.0, eps: float = 1e-6):
@@ -308,3 +307,4 @@ def comb_exp_Angles(eps:float, M1:float, M2:float):
     Phi_odd = Angles_symQSP(coef_odd)
 
     return Phi_even, Phi_odd 
+
