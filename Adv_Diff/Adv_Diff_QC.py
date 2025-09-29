@@ -62,13 +62,14 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
 
     if order == 2:
         qc = QuantumCircuit(2)
+        qc.append(GlobalPhaseGate(np.pi/2),0)
         qc.h(1)
-        qc.rz(-np.pi/2,1)
         g1 = qc.to_gate()
+        qc = QuantumCircuit(2)
         qc.x(1)
+        qc.h(1)
         g2 = qc.to_gate()
-
-        return g1,g2 
+        return g1, g2 
     
     elif order == 4:
         theta = 2*np.arcsin(np.sqrt(2)*2/3)
