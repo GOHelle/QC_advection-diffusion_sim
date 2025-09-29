@@ -24,7 +24,7 @@ def b(x):
     z[mask_z] = np.exp(1 / (x[mask_z] - 1))
     return y/(y+z)
 
-def Bump(x, I = [1.4,1.5,2.5,2.6]):
+def Bump(x, I = [1,1.5,2.5,3]):
     """
     I = (a,b,c,d), a<b<c<d 
     Bump(x) = 1 for x in [b,c]
