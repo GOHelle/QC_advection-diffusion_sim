@@ -19,7 +19,7 @@ defined in `Fourier.py`.
 """
 
 def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: np.exp(-10*(x-4/3)**2), shots:int=10**6, 
-        Complexity:bool=True, order:int = 2, eps=10**(-6), sim_type: str="both", plot:bool=True):
+        Complexity:bool=True, order:int = 2, eps=10**(-8), sim_type: str="both", plot:bool=True):
     """ Quantum simulation of the advection-diffusion equation via QSVT and comparison to classical Fourier approximation.
 
     This function constructs and runs quantum circuits simulating the evolution of an initial function under
@@ -80,13 +80,14 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     elif method=="pure_diff" and order==2: anc=3
     else: anc=4
 
-    # Computing time-evoultion parameter M
+    # Computing time-evolution parameter M
     dx = d/(2**n)
     dt_factors = {2: 1, 4: 3/2, 6: 11/6}
     M_adv = c * T * dt_factors[order] / dx
     M_diff = nu * T * dt_factors[order]**2 / (dx**2)
+    print("M_adv = ", M_adv," M_diff = ",M_diff)
 
-    # sccaling
+    # scaling
     adv_scale = 0.95
     diff_scale = 0.95
 
@@ -95,10 +96,11 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     y = init_f(x)
     if not np.all(y >= 0): sys.exit("Error: initial function not positive")
     norm_y = np.linalg.norm(y)
+    print("norm",norm_y)
     y /= norm_y
 
     # Classical Fourier solution function
-    g = Fourier_approx(*Fourier_coef(init_f,1e-5,d),d)
+    g = Fourier_approx(*Fourier_coef(init_f,1e-6,d),d)
 
     # For storing solution values to return
     z_list, w_list, W_list, max_err_list, success_rate_list, complexity_list = [], [], [], [], [], []
@@ -138,6 +140,9 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         if sim_type != "meas":
             sv = Statevector.from_instruction(qc)
             W = np.asarray(sv.data).reshape(2**n, 2**anc)[:,0]
+            if sim_type != "both":
+                success_rate = np.linalg.norm(W)**2
+                success_rate_list.append(success_rate)
             W *= 2*norm_y/(0.95 if method=="pure_adv" else 2*0.95 if method=="pure_diff" else 1)    
             W_list.append(W)
 
@@ -165,14 +170,14 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
             success_rate_list.append(success_rate)
             print(f"\n-- SUCCESS RATE -- \n succes rate of postselection: {success_rate}\n ")
 
-            # Printing gate counts and circuit depth
-            if Complexity:
-                tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
-                gts = tqc.count_ops()
-                gate_1q = gts['u']
-                gate_2q = gts['cx']
-                complexity_list.append([gate_1q, gate_2q, gate_1q+gate_2q, tqc.depth()])                   
-                print(f"-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
+        # Printing gate counts and circuit depth
+        if Complexity:
+            tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
+            gts = tqc.count_ops()                           # Including "cp" and "cry" improves lower order count
+            gate_1q = gts['u']
+            gate_2q = gts['cx']                             # +gts['cp']+gts['cry']
+            complexity_list.append([gate_1q, gate_2q, gate_1q+gate_2q, tqc.depth()])                   
+            print(f"-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
 
         # Max error
         print("-- MAX ERROR --")
