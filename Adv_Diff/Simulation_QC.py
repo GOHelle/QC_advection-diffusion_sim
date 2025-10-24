@@ -69,20 +69,25 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     T = np.atleast_1d(T)  # Ensure array
     T = T[T != 0]  # Remove any zero entries
     if c == 0 and nu == 0: sys.exit("Error: c and nu cannot both be 0")
-    if order not in [2,4,6]: sys.exit("Error: The order should be either 2, 4 or 6")
+    if order not in [2,4,6,14]: sys.exit("Error: The order should be either 2, 4, 6 or 14")
     if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: plot should be either sv', 'meas' or 'both'")
 
     # Identify which PDE evolution type applies
     method = "pure_diff" if c==0 else "pure_adv" if nu==0 else "adv_diff"
 
     # Choose number of ancilla qubits based on method and order
+    anc = 4 if order ==2 else 6 if order == 14 else 5 
+    if method =="pure_diff": anc = anc-1
+    
+    """
     if (method in ["adv_diff","pure_adv"]) and order>2: anc=5
     elif method=="pure_diff" and order==2: anc=3
     else: anc=4
+    """
 
     # Computing time-evolution parameter M
     dx = d/(2**n)
-    dt_factors = {2: 1, 4: 3/2, 6: 11/6}
+    dt_factors = {2: 1, 4: 3/2, 6: 11/6, 14: 363/140}
     M_adv = c * T * dt_factors[order] / dx
     M_diff = nu * T * dt_factors[order]**2 / (dx**2)
     print("M_adv = ", M_adv," M_diff = ",M_diff)
