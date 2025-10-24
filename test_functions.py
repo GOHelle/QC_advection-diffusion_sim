@@ -33,6 +33,12 @@ def Bump(x, I = [1,1.5,2.5,3]):
     """
     
     return b((x-I[0])/(I[1]-I[0]))*b((I[3]-x)/(I[3]-I[2]))
+    
+def rec(x):
+    x = np.asarray(x)
+    y = np.zeros_like(x)
+    y[x<2] = 1
+    return y
 
 def plot_simulations(init_f, n_order=[(6,2),(6,4),(6,6)], T=0.5, c=1, nu=0.1, shots=10**6, d=4, sim_type="both"):
     """
@@ -118,14 +124,16 @@ def plot_simulations(init_f, n_order=[(6,2),(6,4),(6,6)], T=0.5, c=1, nu=0.1, sh
 
     plt.suptitle(rf'Advection-diffusion simulation at time $T =$ {T} with parameters $c =$ {c} and $\nu =$ {nu}',fontsize=15)
     plt.tight_layout()
-    plt.savefig('Wave_pack3.png')
     plt.show()
 
-# plot_simulations(Gaussian, n_order=[(8,2),(6,6)], T=6, c=0, nu=0.02,shots = 10**6, sim_type="sv")
-# plot_simulations(Sine_sum, n_order=[(8,2),(7,6)], T=0.5, c=1, nu=0.1, shots=10**6, sim_type = "sv")
-# plot_simulations(Wave_pack, n_order=[(9,2),(7,6)], T=3, c=1, nu=0, shots=10**6,sim_type = "sv")
-# plot_simulations(Bump, n_order=[(8,2), (6,6)], T=0.6, c=0, nu=0.1, shots=10**6, sim_type = "sv")
 
+# Example runs: 
+
+# plot_simulations(Gaussian, n_order=[(7,4),(6,6)], T=2, c=0, nu=0.02,shots = 10**6, sim_type="sv")
+# plot_simulations(Sine_sum, n_order=[(8,6),(6,14)], T=0.5, c=0, nu=0.1, shots=10**6, sim_type = "sv")
+# plot_simulations(Wave_pack, n_order=[(10,6),(8,14)], T=1, c=1, nu=0, shots=10**6,sim_type = "sv")
 # plot_simulations(Gaussian, n_order=[(8,2),(6,6),(9,2),(7,6)], T=4, c=1, nu=0,shots = 10**6, sim_type="sv")
+# plot_simulations(Bump, n_order=[(9,2),(7,6)], T=0.6, c=2, nu=0, shots=10**6, sim_type = "sv")
+# plot_simulations(rec, n_order=[(8,2),(7,6)], T=1, c=1, nu=0.02,shots = 10**6, sim_type="meas")
 
 
