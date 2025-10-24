@@ -1,6 +1,7 @@
 import numpy as np
+from math import prod 
 from qiskit import QuantumCircuit, QuantumRegister
-from qiskit.circuit.library import QFT, MCXGate
+from qiskit.circuit.library import QFT, MCXGate, RYGate 
 from qiskit.circuit.library.standard_gates import GlobalPhaseGate
 
 """ 
@@ -54,7 +55,7 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
     Returns a pair of state preparation gates used in block encodings for a given order.
 
     Args:
-        order: Order of the method. Supported values are 2, 4, or 6.
+        order: Order of the method. Supported values are 2, 4, 6 or 14.
 
     Returns:
         (g1, g2): A tuple of state preparation gates.
@@ -70,7 +71,7 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
         qc.h(1)
         g2 = qc.to_gate()
         return g1, g2 
-    
+          
     elif order == 4:
         theta = 2*np.arcsin(np.sqrt(2)*2/3)
         
@@ -90,10 +91,9 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
         qc.ch(0,2,ctrl_state = '0')
         qc.ch(0,1,ctrl_state = '1')
         g2 = qc.to_gate()
-
         return g1, g2
     
-    else:
+    elif order == 6:
         phi_1 = np.arcsin(np.sqrt(9/11)) 
         phi_2 = np.arcsin(-3 / np.sqrt(10)) 
         
@@ -112,7 +112,59 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
         qc.cry(2*phi_2,1,0,ctrl_state = '0')
         qc.ccx(0,2,1,ctrl_state = '10')
         g2 = qc.to_gate()
-        
+        return g1,g2 
+    else:
+        # order = 14
+        # Preparing coefficients, ignoring the alternating sign 
+        p = order//2 # replacing 14 by 7 
+        c = np.zeros(p)
+        for j in range(1,p+1):
+            c[j-1] = prod([(p-j+s)/(p+s) for s in range(1,j+1)])/j 
+        c = c/sum(c)   # normalizing sum(c) = 363/280 exactly
+        c = np.sqrt(c)
+
+        # Computing angles 
+        phi = np.zeros(p-1)
+        a = 1
+        for j in range(p-1):
+            phi[j] = np.arccos(c[j]/a)
+            a = a*np.sin(phi[j])
+            
+        # Preparing the gates
+        for k in range(2):
+            qc = QuantumCircuit(4)
+            if k == 0:
+                qc.append(GlobalPhaseGate(np.pi/2),0)    # Introduce global phase
+            else: 
+                phi = -phi 
+            
+            qc.ry(2*phi[0],0)
+            qc.cry(2*phi[1],0,1)
+            qc.cry(-2*phi[2],1,0)
+            qc.append(RYGate(2*phi[3]).control(num_ctrl_qubits = 2,ctrl_state = '10'),[0,1,2])   # Control state label reversed
+            qc.cry(2*phi[4],2,0)
+            qc.append(RYGate(-2*phi[5]).control(num_ctrl_qubits = 2),[0,2,1])
+            
+            # Changing from gray code to regular binary
+            qc.cx(1,0)
+            qc.cx(2,0)
+            qc.cx(2,1)
+            # This prepares the vector correctly! 
+            
+            if k == 0:
+                qc.h(3)
+            else: 
+                qc.x(3)
+                qc.h(3)
+                
+            qc.mcx([0,3],1, ctrl_state = '00')
+            qc.mcx([0,3],2,ctrl_state = '00')
+            qc.mcx([0,1,3],2,ctrl_state = '001')
+            
+            if k == 0:
+                g1 = qc.to_gate()
+            else: 
+                g2 = qc.to_gate()
         return g1, g2
 
 def Block_enc(n:int, order:int) -> tuple[QuantumCircuit, int]:
@@ -132,6 +184,10 @@ def Block_enc(n:int, order:int) -> tuple[QuantumCircuit, int]:
         anc = 2  # number of ancillary qubits
         k = -1  # argument for Phase_adder
         g1,g2 = Prep(2)
+    elif order == 14:
+        anc = 4
+        k = -7
+        g1,g2 = Prep(14)
     else: 
         anc = 3
         if order == 4:
@@ -158,8 +214,8 @@ def QSVT(n:int, Phi1:np.array, Phi2:np.array, method:str, order:int) -> QuantumC
         method: Supported values:
                   - "pure_diff": pure diffusion
                   - "pure_adv": pure advection
-                  - "adv_diff": combined advection-duffusion
-        order: Order of the method. Supported values are 2, 4, or 6.
+                  - "adv_diff": combined advection-diffusion
+        order: Order of the method. Supported values are 2, 4, 6 and 14.
 
     Returns:
         circ: QSVT circuit implementing the transformation.
