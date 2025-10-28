@@ -133,5 +133,3 @@ It will also print the succes rate, complexity, max error and some information p
 
 All of the above can simply be installed using pip install.
 For details on the pyqsp package see https://github.com/ichuang/pyqsp
-
-This code uses qiskit version 2.0.2 and qiskit-aer version 17.0. Currently there are some issues with newer versions of qiskit. 
