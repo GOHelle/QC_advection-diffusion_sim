@@ -98,8 +98,8 @@ def Fourier_coef(f: Callable, eps: float, d: float, N:int=None) -> tuple[float, 
         
         N += 1
 
-    raise RuntimeError(f"Fourier series did not converge within {max_iter} steps.")
-    
+    print(f"\n-- FOURIER --\nFourier series did not converge within {max_iter} steps\n")
+    return c, np.array(a), np.array(b)  
 
 def Fourier_approx(c:float, a:list, b:list, d:float) -> Callable:
     """ Constructs a time-evolving Fourier approximation function for a solution to the advection-diffusion equation.
@@ -207,7 +207,8 @@ def Fourier_coef_2d(f: Callable, eps: float, d: float, N: int = None) -> Tuple[f
             print(f"-- FOURIER --\nNumber of Fourier coefficients needed: {N}\n")
             return c, np.array(A_list), np.array(B_list), modes
 
-    raise RuntimeError(f"2D Fourier series did not reach error < {eps} within N={max_iter}.")
+    print(f"\n-- FOURIER --\n2D Fourier series did not reach error < {eps} within N={max_iter}.\n")
+    return c, np.array(A_list), np.array(B_list), modes 
 
 def Fourier_approx_2d(c: float, A: np.ndarray, B: np.ndarray, modes: List[Tuple[int, int]], d: float) -> Callable:
     """
