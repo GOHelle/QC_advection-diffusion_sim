@@ -37,7 +37,7 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         init_f: Initial 2D function of X and Y. Default is `sin(pi*(0.5*X + Y)) + 1`.
         shots: Number of measurement shots for the quantum simulation.
         Complexity: If True, prints 1-qubit, 2-qubit gate counts, total gates, and circuit depth.
-        order: Order of the QSVT method (2, 4, or 6).
+        order: Order of the QSVT method (2, 4, 6 or 14).
         eps: Tolerance parameter used for angle calculations.
         sim_type: If sim_type="sv", statevector simulation is performed, if sim_type="meas", measurement is performed, and if sim_type="both", both simulations are performed.
         plot: If True, plots the initial condition and the quantum and Fourier solutions.
@@ -75,12 +75,12 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
 
     if (nu == 0 and c1 == 0) or (nu == 0 and c2 == 0):
         sys.exit("Error: if nu=0, c1 or c2 should be nonzero, to avoid 1d evoultion")
-    if order not in [2,4,6]:
-        sys.exit("Error: The order should be either 2, 4 or 6")
+    if order not in [2,4,6,14]:
+        sys.exit("Error: The order should be either 2, 4, 6 or 14")
     if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: plot should be either sv', 'meas' or 'both'")
 
     # Computing time-evoultion parameter M
-    dt_factors = {2: 1, 4: 3/2, 6: 11/6}
+    dt_factors = {2: 1, 4: 3/2, 6: 11/6, 14: 363/140}
     factor = dt_factors[order]
     M_adv1 = c1 * T * factor / dx
     M_adv2 = c2 * T * factor / dx
@@ -89,8 +89,10 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     adv_scale = 0.95
     diff_scale = 0.95
 
-    anc1 = 3 if (method1 == "pure_diff" and order == 2) else 5 if (method1 != "pure_diff" and order > 2) else 4
-    anc2 = 3 if (method2 == "pure_diff" and order == 2) else 5 if (method2 != "pure_diff" and order > 2) else 4
+    anc1 = 4 if order ==2 else 6 if order == 14 else 5 
+    anc2 = 4 if order ==2 else 6 if order == 14 else 5
+    if method1 =="pure_diff": anc1 = anc1-1
+    if method2 =="pure_diff": anc2 = anc2-1
     anc = anc1 + anc2
 
     qr_anc = QuantumRegister(anc, name = 'Ancilla')
