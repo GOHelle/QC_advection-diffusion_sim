@@ -6,7 +6,7 @@ from qiskit.circuit.library.standard_gates import GlobalPhaseGate
 
 """ 
 This module defines functions to construct Quantum Singular Value Transformation (QSVT) circuits 
-for simulating advection and diffusion of order 2, 4, and 6.
+for simulating advection and diffusion of order 2, 4, 6 and 14.
 
 It includes methods Phase_adder, Prep, Block_enc, QSVT, and QSVT_single.
 
@@ -113,8 +113,8 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
         qc.ccx(0,2,1,ctrl_state = '10')
         g2 = qc.to_gate()
         return g1,g2 
-    else:
-        # order = 14
+    
+    else: # order = 14
         # Preparing coefficients, ignoring the alternating sign 
         p = order//2 # replacing 14 by 7 
         c = np.zeros(p)
@@ -173,7 +173,7 @@ def Block_enc(n:int, order:int) -> tuple[QuantumCircuit, int]:
 
     Parameters:
         n: Number of qubits.
-        order: Order of the method. Supported values are 2, 4, or 6.
+        order: Order of the method. Supported values are 2, 4, 6 and 14.
 
     Returns:
         qc: The block-encoding circuit
@@ -280,7 +280,7 @@ def QSVT_single(n:int, Phi:np.array, order:int) -> QuantumCircuit:
     Args:
         n: Number of qubits.
         Phi1: Sequence of phase angles for QSVT.
-        order: Order of the method. Supported values are 2, 4, or 6.
+        order: Order of the method. Supported values are 2, 4, 6 and 14.
 
     Returns:
         circ: QSVT circuit implementing the transformation.

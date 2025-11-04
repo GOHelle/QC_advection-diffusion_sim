@@ -36,7 +36,7 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         init_f: Initial condition function f(x). Default is a Gaussian centered at 4/3.
         shots: Number of measurement shots for the quantum simulation.
         Complexity: If True, prints number of 1-qubit gates, number of 2-qubit gates, total number of gates, and circuit depth after transpiling.
-        order: Order of the method. Supported values are 2, 4, or 6.
+        order: Order of the method. Supported values are 2, 4, 6 and 14.
         eps: Tolerance parameter used for angle calculations.
              sim_type: If sim_type="sv", statevector simulation is performed, if sim_type="meas", measurement is performed, and if sim_type="both", both simulations are performed.
         plot: If True, plots the initial condition and the quantum and Fourier solutions for each value in T.
@@ -78,19 +78,12 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     # Choose number of ancilla qubits based on method and order
     anc = 4 if order ==2 else 6 if order == 14 else 5 
     if method =="pure_diff": anc = anc-1
-    
-    """
-    if (method in ["adv_diff","pure_adv"]) and order>2: anc=5
-    elif method=="pure_diff" and order==2: anc=3
-    else: anc=4
-    """
 
     # Computing time-evolution parameter M
     dx = d/(2**n)
     dt_factors = {2: 1, 4: 3/2, 6: 11/6, 14: 363/140}
     M_adv = c * T * dt_factors[order] / dx
     M_diff = nu * T * dt_factors[order]**2 / (dx**2)
-    print("M_adv = ", M_adv," M_diff = ",M_diff)
 
     # scaling
     adv_scale = 0.95
@@ -101,7 +94,6 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     y = init_f(x)
     if not np.all(y >= 0): sys.exit("Error: initial function not positive")
     norm_y = np.linalg.norm(y)
-    print("norm",norm_y)
     y /= norm_y
 
     # Classical Fourier solution function
