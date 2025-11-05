@@ -63,11 +63,12 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
 
     if order == 2:
         qc = QuantumCircuit(2)
-        qc.append(GlobalPhaseGate(np.pi/2),0)
+        # qc.append(GlobalPhaseGate(np.pi/2),0)
         qc.h(1)
         g1 = qc.to_gate()
         qc = QuantumCircuit(2)
         qc.x(1)
+        qc.sdg(1)                           # Check that this works.        
         qc.h(1)
         g2 = qc.to_gate()
         return g1, g2 
@@ -76,9 +77,10 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
         theta = 2*np.arcsin(np.sqrt(2)*2/3)
         
         qc = QuantumCircuit(3)
-        qc.append(GlobalPhaseGate(np.pi/2),0)
+        # qc.append(GlobalPhaseGate(np.pi/2),0)
         qc.ry(-theta,0)
         qc.x(2)
+        qc.s(2)                          # Check that this works. 
         qc.ch(0,2,ctrl_state = '0')
         qc.x(2)
         qc.x(1)
@@ -134,7 +136,10 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
         for k in range(2):
             qc = QuantumCircuit(4)
             if k == 0:
-                qc.append(GlobalPhaseGate(np.pi/2),0)    # Introduce global phase
+                # qc.append(GlobalPhaseGate(np.pi/2),0)    # Introduce global phase
+                qc.x(0)                                    # Check that this works. 
+                qc.s(0)
+                qc.x(0)      
             else: 
                 phi = -phi 
             
