@@ -77,10 +77,11 @@ Complexity = True                           # Whether or not to display complexi
 order = 4                                   # Method order
 eps = 10**(-6)                              # error tolerance when deriving angle sequences
 sim_type  = "both"                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
+exact_sol = True                            # Whether or not to compute and plot the exact solution
 plot = True                                 # Whether or not to plot results
 
 # Run 1D simulation with specified parameters. 
-Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, sim_type, plot)
+Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, sim_type, exact_sol, plot)
 ```
 
 This will produce the plot below
@@ -110,10 +111,11 @@ Complexity = True                                           # Whether or not to 
 order = 2                                                   # Method order
 eps = 10**(-6)                                              # error tolerance when deriving angle sequences
 sim_type  = "both"                                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
+exact_sol = True                                            # Whether or not to compute and plot the exact solution
 plot = True                                                 # Whether or not to plot results
 
 # Run 2D simulation with specified parameters. 
-Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, sim_type, plot)
+Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, sim_type, exact_sol, plot)
 ```
 
 This will produce the plot below

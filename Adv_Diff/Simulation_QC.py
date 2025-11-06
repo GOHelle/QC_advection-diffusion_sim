@@ -5,7 +5,6 @@ from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
 from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
 from tabulate import tabulate
-from typing import Union
 from Adv_Diff import Adv_Diff_QC
 from Adv_Diff.Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
 from Adv_Diff.Fourier import Fourier_coef, Fourier_approx
@@ -19,7 +18,7 @@ defined in `Fourier.py`.
 """
 
 def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: np.exp(-10*(x-4/3)**2), shots:int=10**6, 
-        Complexity:bool=True, order:int = 2, eps=10**(-8), sim_type: str="both", plot:bool=True):
+        Complexity:bool=True, order:int = 2, eps=10**(-8), sim_type: str="both", exact_sol:bool = True, plot:bool=True):
     """ Quantum simulation of the advection-diffusion equation via QSVT and comparison to classical Fourier approximation.
 
     This function constructs and runs quantum circuits simulating the evolution of an initial function under
@@ -39,23 +38,24 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         order: Order of the method. Supported values are 2, 4, 6 and 14.
         eps: Tolerance parameter used for angle calculations.
              sim_type: If sim_type="sv", statevector simulation is performed, if sim_type="meas", measurement is performed, and if sim_type="both", both simulations are performed.
+        exact_sol: If True, computes the classical Fourier solution for comparison.
         plot: If True, plots the initial condition and the quantum and Fourier solutions for each value in T.
 
     Outputs:
         - A matplotlib figure with subplots for the initial condition and a comparison plot (quantum vs Fourier) for each final time value in T if plot = True.
         - gate counts and transpiled circuit depth if `Complexity=True`.
         - success rate of the postselection if measurement is performed.
-        - Max error value(s)
+        - Max error value(s) if exact_sol = True.
         - A table summarizing all the printed outputs for each value in T.
 
     Returns:
         x: The space discretization
         f_Scaled(x): The scaled inital function on the discretized space
         z_list: a list of quantum solutions from measurement for each value in T. Note this is only non-empty if plot = "meas" or "both".
-        w_list: a list of Fourier solutions for each value in T.
+        w_list: a list of Fourier solutions for each value in T. 
         W_list: a list of quantum solutions from statevector simulation for each value in T. Note this is only non-empty if plot = "sv" or "both".
         max_err_list: a list of max errors for each value in T. Each element is a list containing the max error found from the measurement outcomes, 
-                      and/or the statevector simulation, dependent on plot.
+                      and/or the statevector simulation, dependent on plot. Note this is only non-empty if exact_sol = True.
         complexity_list: a list of lists containing the number of 1-qubit gates, number of 2-qubit gates, total number of gates, and circuit depth 
                          after transpiling for each value in T. Note this is only non-empty if Complexity=True.
 
@@ -97,7 +97,8 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
     y /= norm_y
 
     # Classical Fourier solution function
-    g = Fourier_approx(*Fourier_coef(init_f,1e-6,d),d)
+    if exact_sol:
+        g = Fourier_approx(*Fourier_coef(init_f,1e-6,d),d)
 
     # For storing solution values to return
     z_list, w_list, W_list, max_err_list, success_rate_list, complexity_list = [], [], [], [], [], []
@@ -130,8 +131,9 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
             qc.append(Adv_Diff_QC.QSVT(n, Phi_odd, Phi_even, method, order), qr_anc[:] + qr[:])
 
         # Fourier approximation
-        w = g(x,T[i],c,nu)
-        w_list.append(w)
+        if exact_sol:
+            w = g(x,T[i],c,nu)
+            w_list.append(w)
 
         # State vector simulation
         if sim_type != "meas":
@@ -177,17 +179,18 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
             print(f"-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
 
         # Max error
-        print("-- MAX ERROR --")
-        max_err = []
-        if sim_type != "sv":
-            max_err_meas = np.max(np.abs(z - w))
-            print(f"Max error from measurement: {max_err_meas}")
-            max_err.append(max_err_meas)
-        if sim_type != "meas":
-            max_err_sv = np.max(np.abs(W - w))
-            print(f"Max error from statevector: {max_err_sv}\n")
-            max_err.append(max_err_sv)
-        max_err_list.append(max_err)
+        if exact_sol:
+            print("-- MAX ERROR --")
+            max_err = []
+            if sim_type != "sv":
+                max_err_meas = np.max(np.abs(z - w))
+                print(f"Max error from measurement: {max_err_meas}")
+                max_err.append(max_err_meas)
+            if sim_type != "meas":
+                max_err_sv = np.max(np.abs(W - w))
+                print(f"Max error from statevector: {max_err_sv}\n")
+                max_err.append(max_err_sv)
+            max_err_list.append(max_err)
 
         # Plot
         if plot:
@@ -200,7 +203,7 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
             plt.subplot(num_plots,1,i+2)
             if sim_type != "sv": plt.plot(x, z, label="Quantum measurements")
             if sim_type != "meas": plt.plot(x, W.real, label="Quantum statevector")
-            plt.plot(x,w,label="Exact (fourier)")
+            if exact_sol: plt.plot(x,w,label="Exact (fourier)")
             plt.ylim(y_min-0.05,y_max+0.05)
             plt.title(f"T={T[i]}")
             plt.legend()
@@ -211,14 +214,15 @@ def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: 
         table, headers = [], ["T"]
         for i,t in enumerate(T):
             row = [t]
-            row.append(max_err_list[i][0])
+            if exact_sol: row.append(max_err_list[i][0])
             if sim_type != "sv":
                 row.append(success_rate_list[i])
                 if Complexity: row.extend(complexity_list[i][0:2])
             table.append(row)
 
-        if sim_type == "meas": headers += ["meas max error"]
-        else: headers += ["sv max error"]
+        if exact_sol:
+            if sim_type == "meas": headers += ["meas max error"]
+            else: headers += ["sv max error"]
         if sim_type != "sv":
             headers += ["success rate"]
             if Complexity: headers += ["1-qubit gates","2-qubit gates"]
