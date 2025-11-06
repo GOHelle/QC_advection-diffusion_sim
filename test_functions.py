@@ -7,6 +7,9 @@ from scipy.interpolate import interp1d
 def Gaussian(x,c = 5/3,scale = 10):
     return np.exp(-scale*(x-c)**2)
 
+def Gaussian_2d(x,y,c = (5/3,2),scale = 7):
+    return np.exp(-scale*((x-c[0])^2+(y-c[1])^2))
+
 def Sine_sum(x,k1 = 3,k2 = 11):
     return 0.5*np.sin((k1/2)*np.pi*x)+0.5*np.sin((k2/2)*np.pi*x)+ 1
     
