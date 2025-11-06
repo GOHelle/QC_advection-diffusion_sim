@@ -4,149 +4,13 @@ from Adv_Diff import Simulation_QC
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
 from qiskit.quantum_info import Statevector
 from Adv_Diff.Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
-from Adv_Diff.Adv_Diff_QC import Phase_adder
+from Adv_Diff.Adv_Diff_QC import Block_enc
 from pytket.extensions.qiskit import qiskit_to_tk
 from pytket.extensions.quantinuum import QuantinuumBackend
-from qiskit.circuit.library import QFT, MCXGate, RYGate 
-from math import prod 
-from qiskit.circuit.library.standard_gates import GlobalPhaseGate
+from qiskit.circuit.library import QFT, MCXGate
 
-# this file contains the same function as Adv_Diff_QC.py and a simplified Sim function that only returns the quantum circuit
+# this file contains the same QSVT function as Adv_Diff_QC.py (but with a decomposition of U_inv.control(1)) and a simplified Sim function that only returns the quantum circuit
 # convert_sim function added at the end to convert the circuit to tket and print gate counts
-
-def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
-
-    if order == 2:
-        qc = QuantumCircuit(2)
-        qc.append(GlobalPhaseGate(np.pi/2),0)
-        qc.h(1)
-        g1 = qc.to_gate()
-        qc = QuantumCircuit(2)
-        qc.x(1)
-        qc.h(1)
-        g2 = qc.to_gate()
-        return g1, g2 
-          
-    elif order == 4:
-        theta = 2*np.arcsin(np.sqrt(2)*2/3)
-        
-        qc = QuantumCircuit(3)
-        qc.append(GlobalPhaseGate(np.pi/2),0)
-        qc.ry(-theta,0)
-        qc.x(2)
-        qc.ch(0,2,ctrl_state = '0')
-        qc.x(2)
-        qc.x(1)
-        qc.ch(0,1,ctrl_state = '1')
-        qc.x(1)
-        g1 = qc.to_gate()
-
-        qc = QuantumCircuit(3)
-        qc.ry(theta,0)
-        qc.ch(0,2,ctrl_state = '0')
-        qc.ch(0,1,ctrl_state = '1')
-        g2 = qc.to_gate()
-        return g1, g2
-    
-    elif order == 6:
-        phi_1 = np.arcsin(np.sqrt(9/11)) 
-        phi_2 = np.arcsin(-3 / np.sqrt(10)) 
-        
-        qc = QuantumCircuit(3)
-        qc.x(2)
-        qc.s(2)
-        qc.h(2)
-        qc.ry(2*phi_1,1)
-        qc.cry(-2*phi_2,1,0,ctrl_state = '0')
-        qc.ccx(0,2,1,ctrl_state = '10')
-        g1 = qc.to_gate()
-        
-        qc = QuantumCircuit(3)
-        qc.h(2)
-        qc.ry(2*phi_1,1)
-        qc.cry(2*phi_2,1,0,ctrl_state = '0')
-        qc.ccx(0,2,1,ctrl_state = '10')
-        g2 = qc.to_gate()
-        return g1,g2 
-    
-    else: # order = 14
-        # Preparing coefficients, ignoring the alternating sign 
-        p = order//2 # replacing 14 by 7 
-        c = np.zeros(p)
-        for j in range(1,p+1):
-            c[j-1] = prod([(p-j+s)/(p+s) for s in range(1,j+1)])/j 
-        c = c/sum(c)   # normalizing sum(c) = 363/280 exactly
-        c = np.sqrt(c)
-
-        # Computing angles 
-        phi = np.zeros(p-1)
-        a = 1
-        for j in range(p-1):
-            phi[j] = np.arccos(c[j]/a)
-            a = a*np.sin(phi[j])
-            
-        # Preparing the gates
-        for k in range(2):
-            qc = QuantumCircuit(4)
-            if k == 0:
-                qc.append(GlobalPhaseGate(np.pi/2),0)
-            else: 
-                phi = -phi 
-            
-            qc.ry(2*phi[0],0)
-            qc.cry(2*phi[1],0,1)
-            qc.cry(-2*phi[2],1,0)
-            qc.append(RYGate(2*phi[3]).control(num_ctrl_qubits = 2,ctrl_state = '10'),[0,1,2])   # Control state label reversed
-            qc.cry(2*phi[4],2,0)
-            qc.append(RYGate(-2*phi[5]).control(num_ctrl_qubits = 2),[0,2,1])
-            
-            # Changing from gray code to regular binary
-            qc.cx(1,0)
-            qc.cx(2,0)
-            qc.cx(2,1)
-            # This prepares the vector correctly! 
-            
-            if k == 0:
-                qc.h(3)
-            else: 
-                qc.x(3)
-                qc.h(3)
-                
-            qc.mcx([0,3],1, ctrl_state = '00')
-            qc.mcx([0,3],2,ctrl_state = '00')
-            qc.mcx([0,1,3],2,ctrl_state = '001')
-            
-            if k == 0:
-                g1 = qc.to_gate()
-            else: 
-                g2 = qc.to_gate()
-        return g1, g2
-    
-def Block_enc(n:int, order:int) -> tuple[QuantumCircuit, int]:
-
-    if order == 2:
-        anc = 2  # number of ancillary qubits
-        k = -1  # argument for Phase_adder
-        g1,g2 = Prep(2)
-    elif order == 14:
-        anc = 4
-        k = -7
-        g1,g2 = Prep(14)
-    else: 
-        anc = 3
-        if order == 4:
-            k = -2
-            g1,g2 = Prep(4)
-        else:
-            k = -3
-            g1,g2 = Prep(6)
-
-    qc = QuantumCircuit(n+anc)
-    qc.append(g1,range(anc))
-    qc.append(Phase_adder(anc,n,k), range(n+anc))
-    qc.append(g2.inverse(), range(anc))
-
-    return qc, anc
 
 def QSVT(n:int, Phi1:np.array, Phi2:np.array, method:str, order:int) -> QuantumCircuit:
     U, qr0_anc = Block_enc(n, order)
@@ -306,9 +170,9 @@ def convert_sim(n=4, T=0.5, c=1, nu=0.01, d=4, init_f = lambda x: np.exp(-10*(x-
     print(f"Cost: {cost}") # this is 0 when we use the simulator
 
 # Advection example
-Simulation_QC.Sim(5, T = 0.5, c = 1, nu = 0, init_f = lambda x: np.exp(-10*(x-4/3)**2), order = 4, sim_type="meas")
+Simulation_QC.Sim(5, T = 0.5, c = 1, nu = 0, init_f = lambda x: np.exp(-10*(x-4/3)**2), order = 4, sim_type="meas")   # for visualizing the results with these parameters
 convert_sim(5, T = 0.5, c = 1, nu = 0, init_f = lambda x: np.exp(-10*(x-4/3)**2), order = 4)
 
 # Diffusion example
-Simulation_QC.Sim(6, T = 0.5, c = 0, nu = 0.01, init_f = lambda x: np.exp(-10*(x-4/3)**2), order = 6)
+Simulation_QC.Sim(6, T = 0.5, c = 0, nu = 0.01, init_f = lambda x: np.exp(-10*(x-4/3)**2), order = 6)   # for visualizing the results with these parameters
 convert_sim(6, T = 0.5, c = 0, nu = 0.01, init_f = lambda x: np.exp(-10*(x-4/3)**2), order = 6)
