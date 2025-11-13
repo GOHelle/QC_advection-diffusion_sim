@@ -46,15 +46,18 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     Outputs:
         - 3D surface plots of the initial condition, exact solution, and quantum solution at final time T if plot = True. 
         - Gate counts and circuit depth if Complexity=True.
-        - Success rate of postselection from measurements.
+        - Success rate of postselection
         - Max errors between quantum and exact solutions if exact_sol = True.
 
     Returns:
+        x: Spatial grid points in x direction
+        y: Spatial grid points in y direction
         init_vals: Inital condition over space discretization
-        exact: Fourier approximation. If exact_sol = False, exact = None
         z: Measurement quantum solution. If sim_type ="sv", z = None
+        exact: Fourier approximation. If exact_sol = False, exact = None
         W: Statevector quantum solution. If sim_type ="meas", W = None
         max_err: List of maximum errors from measurement and statevector solutions. If exact_sol = False, max_err = []
+        success_rate: Success rate of postselection.
         complexity: List of complexity data [1-qubit gates, 2-qubit gates, total gates, circuit depth]. If Complexity=False, Complexity = None
 
     Notes:
@@ -133,13 +136,17 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     W = None
     if sim_type != "meas":
         sv = Statevector.from_instruction(qc)
-        W = 4*np.asarray(sv.data).reshape(N, N, 2**anc)[:, :, 0]
+        W = np.asarray(sv.data).reshape(N, N, 2**anc)[:, :, 0]
+        if sim_type != "both":
+            success_rate = np.linalg.norm(W)**2
         # Rescale according to method
+        W *= 2**2
         W /= adv_scale if method1 == "pure_adv" else (2 * diff_scale if method1 == "pure_diff" else 1)
         W /= adv_scale if method2 == "pure_adv" else (2 * diff_scale if method2 == "pure_diff" else 1)
 
     # Measurements
     z  = None
+    complexity = None
     if sim_type != "sv":
         qc.measure(qr_anc,cr_anc)
         qc.measure(qr,cr)
@@ -171,14 +178,14 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         z /= adv_scale if method1 == "pure_adv" else (2 * diff_scale if method1 == "pure_diff" else 1)
         z /= adv_scale if method2 == "pure_adv" else (2 * diff_scale if method2 == "pure_diff" else 1)
 
-        # Printing gate counts and circuit depth
-        if Complexity:
-            tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
-            gts = tqc.count_ops()
-            gate_1q = gts['u']
-            gate_2q = gts['cx']                  
-            print(f"\n-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
-            complexity = [gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()]
+    # Printing gate counts and circuit depth
+    if Complexity:
+        tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
+        gts = tqc.count_ops()
+        gate_1q = gts['u']
+        gate_2q = gts['cx']                  
+        print(f"\n-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
+        complexity = [gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()]
 
     # Exact solution
     exact = None
@@ -250,4 +257,4 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         plt.tight_layout()
         plt.show()
 
-    return init_vals, exact, z, W, max_err, complexity
+    return x, y, init_vals, z, exact, W, max_err, success_rate, complexity
