@@ -122,7 +122,7 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
         c = np.zeros(p)
         for j in range(1,p+1):
             c[j-1] = prod([(p-j+s)/(p+s) for s in range(1,j+1)])/j 
-        c = c/sum(c)   # normalizing sum(c) = 363/280 exactly
+        c = c/sum(c)   # normalizing. Exact value: sum(c) = 363/280
         c = np.sqrt(c)
 
         # Computing angles 
@@ -137,7 +137,7 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
             qc = QuantumCircuit(4)
             if k == 0:
                 # qc.append(GlobalPhaseGate(np.pi/2),0)    # Introduce global phase
-                qc.x(0)                                    # Check that this works. 
+                qc.x(0)                                    
                 qc.s(0)
                 qc.x(0)      
             else: 
@@ -154,7 +154,6 @@ def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
             qc.cx(1,0)
             qc.cx(2,0)
             qc.cx(2,1)
-            # This prepares the vector correctly! 
             
             if k == 0:
                 qc.h(3)
@@ -186,8 +185,8 @@ def Block_enc(n:int, order:int) -> tuple[QuantumCircuit, int]:
     """
 
     if order == 2:
-        anc = 2  # number of ancillary qubits
-        k = -1  # argument for Phase_adder
+        anc = 2  
+        k = -1 
         g1,g2 = Prep(2)
     elif order == 14:
         anc = 4
@@ -272,7 +271,6 @@ def QSVT(n:int, Phi1:np.array, Phi2:np.array, method:str, order:int) -> QuantumC
 
     circ.h(qr_anc[0])
     circ.h(qr_anc[1]) 
-    
     circ.append(QFT(n,inverse = True),qr1[:])
 
     return circ
