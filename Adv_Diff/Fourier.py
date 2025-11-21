@@ -186,6 +186,41 @@ def Fourier_coef_2d(f: Callable, eps: float, d: float, N: int = None) -> Tuple[f
     X, Y = np.meshgrid(x_vals, y_vals, indexing="xy")
     f_vals = f(X, Y)
 
+    max_iter = 25                     # Reduced to bound running time.
+    
+    approx_vals = np.full_like(f_vals, fill_value=c, dtype=float)
+    modes = []
+    A_list, B_list = [], []
+    N = 1
+    while N < max_iter +1:
+        L1 = [(j,N) for j in range(N+1)]
+        L2 = [(N,j) for j in range(N-1,-N-1,-1)]
+        L3 = [(j,-N) for j in range(N-1,0,-1)]
+        L = L1+L2+L3 
+        for nab in L:
+            A_n, B_n = compute_coef(*nab)
+            A_list.append(A_n)
+            B_list.append(B_n)
+            modes.append(nab)
+            phase = omega * (nab[0] * X + nab[1] * Y)
+            approx_vals += A_n * np.cos(phase) + B_n * np.sin(phase)
+        er = np.max(np.abs(f_vals - approx_vals))
+        print("eps",eps)
+        if er < eps:
+            print(f"-- FOURIER --\nNumber of Fourier coefficients needed: {len(modes)}\n")
+            return c, np.array(A_list), np.array(B_list), modes
+        else: 
+            N += 1
+
+    print(f"\n-- FOURIER --\n2D Fourier series did not reach error < {eps} within N={max_iter}.\n")
+    return c, np.array(A_list), np.array(B_list), modes 
+
+    
+    x_vals = np.linspace(0.0, d, 1000, endpoint=False)
+    y_vals = np.linspace(0.0, d, 1000, endpoint=False)
+    X, Y = np.meshgrid(x_vals, y_vals, indexing="xy")
+    f_vals = f(X, Y)
+
     max_iter = 500
     for N in range(1, max_iter + 1):
         approx_vals = np.full_like(f_vals, fill_value=c, dtype=float)
