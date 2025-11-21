@@ -66,7 +66,6 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
         - The number of ancilla qubits is chosen automatically based on the type of evolutions in each direction and the QSVT order.
         - Postselection on ancillary measurements is performed to extract the quantum output. The success rate is printed.
     """
-
     N = 2**n  
     dx = d / N
     x = np.linspace(0, d, N)
@@ -78,12 +77,12 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     method2 = "pure_adv" if nu == 0 else "pure_diff" if c2 == 0 else "adv_diff"
 
     if (nu == 0 and c1 == 0) or (nu == 0 and c2 == 0):
-        sys.exit("Error: if nu=0, c1 or c2 should be nonzero, to avoid 1d evoultion")
+        sys.exit("Error: if nu=0, c1 or c2 should be nonzero, to avoid 1d evolution")
     if order not in [2,4,6,14]:
         sys.exit("Error: The order should be either 2, 4, 6 or 14")
-    if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: plot should be either sv', 'meas' or 'both'")
+    if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: sim_type should be either sv', 'meas' or 'both'")
 
-    # Computing time-evoultion parameter M
+    # Computing time-evolution parameter M
     dt_factors = {2: 1, 4: 3/2, 6: 11/6, 14: 363/140}
     factor = dt_factors[order]
     M_adv1 = c1 * T * factor / dx
@@ -97,13 +96,14 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     anc2 = 4 if order ==2 else 6 if order == 14 else 5
     if method1 =="pure_diff": anc1 = anc1-1
     if method2 =="pure_diff": anc2 = anc2-1
-    anc = anc1 + anc2
+    anc = max(anc1,anc2)+1        # Replace anc1 +anc2 by max + 1
 
     qr_anc = QuantumRegister(anc, name = 'Ancilla')
     cr_anc = ClassicalRegister(anc)
     qr = QuantumRegister(2*n)
     cr = ClassicalRegister(2*n)
     qc = QuantumCircuit(qr_anc, qr, cr_anc, cr)
+    print("Ancillas = ", anc, "Spatial = ", 2*n, "Total = ", anc+2*n)
  
     # Initial state preparation
     init_vals = init_f(X, Y) 
@@ -113,9 +113,9 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
     init_vals /= norm
     qc.prepare_state(Statevector(init_vals.flatten()),qr) 
 
-    # QSVT evoultion
+    # QSVT evolution
     print(f"-- ANGLE SEQUENCES --")
-    def build_qsvt(method, M_adv):
+    def build_qsvt(method, M_adv):                       
         if method == "pure_adv":
             Phi_cos, Phi_sin = JA_exp_Angles(M_adv, adv_scale, eps)
             return Adv_Diff_QC.QSVT(n, Phi_cos, Phi_sin, method, order)
@@ -126,15 +126,18 @@ def Sim(n: int, T: float, c1: float, c2:float, nu: float, d:float=4, init_f=lamb
             Phi_even, Phi_odd = comb_exp_Angles(eps, M_diff, M_adv)
             return Adv_Diff_QC.QSVT(n, Phi_odd, Phi_even, method, order)
 
-    qsvt1 = build_qsvt(method1, M_adv1)  # QSVT evoultion in x direction
-    qc.append(qsvt1, qr_anc[:anc1] + qr[:n])
+    qsvt1 = build_qsvt(method1, M_adv1)  # QSVT evolution in x direction
+    qc.append(qsvt1, qr_anc[:anc-1] + qr[:n])
+    
+    qc.mcx(qr_anc[:anc-1],qr_anc[anc-1],ctrl_state = (anc-1)*'0')   # Composition trick 
+    qc.x(qr_anc[anc-1])
 
-    qsvt2= build_qsvt(method2, M_adv2)  # QSVT evoultion in y direction
-    qc.append(qsvt2, qr_anc[anc1:] + qr[n:])
+    qsvt2= build_qsvt(method2, M_adv2)  # QSVT evolution in y direction
+    qc.append(qsvt2, qr_anc[:anc-1] + qr[n:])
 
     # Statevector simulation
     W = None
-    if sim_type != "meas":
+    if sim_type != "meas": 
         sv = Statevector.from_instruction(qc)
         W = np.asarray(sv.data).reshape(N, N, 2**anc)[:, :, 0]
         if sim_type != "both":
