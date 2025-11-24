@@ -1,325 +1,321 @@
 import numpy as np
-from math import prod 
+from math import prod
 from qiskit import QuantumCircuit, QuantumRegister
-from qiskit.circuit.library import QFT, MCXGate, RYGate 
-from qiskit.circuit.library.standard_gates import GlobalPhaseGate
+from qiskit.circuit.library import QFT, MCXGate, RYGate
 
-""" 
-This module defines functions to construct Quantum Singular Value Transformation (QSVT) circuits 
-for simulating advection and diffusion of order 2, 4, 6 and 14.
+"""
+This module defines functions for constructing Quantum Singular Value Transformation (QSVT)
+circuits used to simulate advection and diffusion operators of order 2, 4, 6, and 14.
 
-It includes methods Phase_adder, Prep, Block_enc, QSVT, and QSVT_single.
+Functions:
+- phase_adder: Build a controlled phase-addition circuit used in block encodings.
+- prep: Construct state-preparation gates for a given finite-difference order.
+- block_encoding: Build block encodings for the discretized differential operators.
+- qsvt: Construct two-angle QSVT circuits for diffusion, advection, or combined cases.
+- qsvt_single: Construct a simplified single-angle QSVT circuit (for pure diffusion).
+"""
 
-Phase_adder construct a phase adder circuit used in the block encodings. 
 
-Prep prepares the appropriate state preparation gates used in the block encodings.
-
-Block_enc returns the appropriate block encoding, given a choice of method order, and the number of ancillary qubits 
-          needed. The block encoding is used for constructing the QSVT circuit
-
-QSVT and QSVT_single returns the appropriate QSVT circuit depending on whether pure diffusion, pure advection or 
-                     advection-diffusion is simulated. QSVT constructs a full two-angle QSVT circuit, while QSVT_single 
-                     constructs a simplified single-angle QSVT circuit
-"""  
-
-def Phase_adder(m:int, n:int, k:float=None) -> QuantumCircuit:
-    """Constructs a phase adder circuit implementing: |a>|b> --> xi^{ab}|a>|b> for xi = exp(2/pi i /2^n).
+def phase_adder(num_qubits_a: int, num_qubits_b: int, k: float | None = None) -> QuantumCircuit:
+    """Construct a phase-adder circuit implementing
+    |a>|b> --> xi^{ab}|a>|b> where xi = exp(2/pi i /2^n).
 
     Args:
-        m: Number of qubits in register |a>.
-        n: Number of qubits in register |b>.
-        k: Optional phase shift parameter.
+        num_qubits_a: Number of qubits in register |a⟩.
+        n: Number of qubits in register |b⟩.
+        k: Optional additional phase-shift parameter.
 
     Returns:
-        circ: Quantum circuit implementing the phase addition.
+        QuantumCircuit implementing the phase addition.
     """
 
-    if m>n:
-        m = m%n 
+    if num_qubits_a > num_qubits_b:
+        num_qubits_a = num_qubits_a % num_qubits_b
 
-    circ = QuantumCircuit(m+n,name = 'Phase_adder')
-    for i in range(n):
-        for j in range(min(m,n-i)):
-            circ.cp(2*np.pi/2**(n-i-j),j,m+i)
-    
+    circuit = QuantumCircuit(num_qubits_a + num_qubits_b, name="phase_adder")
+
+    for i in range(num_qubits_b):
+        for j in range(min(num_qubits_a, num_qubits_b - i)):
+            circuit.cp(2 * np.pi / 2 ** (num_qubits_b - i - j), j, num_qubits_a + i)
+
     # Optional phase rotation applied if k is given
-    if k:
-        a = 2*np.pi*k
-        for i in range(n):
-            circ.p(a/2**(n-i),i+m)
+    if k is not None:
+        phase_factor = 2 * np.pi * k
+    for i in range(num_qubits_b):
+        circuit.p(phase_factor / 2 ** (num_qubits_b - i), i + num_qubits_a)
 
-    return circ
+    return circuit
 
-def Prep(order:int) -> tuple[QuantumCircuit, QuantumCircuit]:
-    """
-    Returns a pair of state preparation gates used in block encodings for a given order.
+
+def prep(order: int) -> tuple[QuantumCircuit, QuantumCircuit]:
+    """Return state-preparation gates used in the block encodings.
 
     Args:
-        order: Order of the method. Supported values are 2, 4, 6 or 14.
+        order: Finite-difference order (supported: 2, 4, 6, 14).
 
     Returns:
-        (g1, g2): A tuple of state preparation gates.
+        A tuple of state preparation gates.
     """
 
     if order == 2:
-        qc = QuantumCircuit(2)
-        # qc.append(GlobalPhaseGate(np.pi/2),0)
-        qc.h(1)
-        g1 = qc.to_gate()
-        qc = QuantumCircuit(2)
-        qc.x(1)
-        qc.sdg(1)                           # Check that this works.        
-        qc.h(1)
-        g2 = qc.to_gate()
-        return g1, g2 
+        qc1 = QuantumCircuit(2)
+        qc1.h(1)
+        prep_gate_1 = qc1.to_gate()
+
+        qc2 = QuantumCircuit(2)
+        qc2.x(1)
+        qc2.sdg(1)
+        qc2.h(1)
+        prep_gate_2 = qc2.to_gate()
+
+        return prep_gate_1, prep_gate_2
           
     elif order == 4:
-        theta = 2*np.arcsin(np.sqrt(2)*2/3)
-        
-        qc = QuantumCircuit(3)
-        # qc.append(GlobalPhaseGate(np.pi/2),0)
-        qc.ry(-theta,0)
-        qc.x(2)
-        qc.s(2)                          # Check that this works. 
-        qc.ch(0,2,ctrl_state = '0')
-        qc.x(2)
-        qc.x(1)
-        qc.ch(0,1,ctrl_state = '1')
-        qc.x(1)
-        g1 = qc.to_gate()
+        theta = 2 * np.arcsin(np.sqrt(2) * 2 / 3)
 
-        qc = QuantumCircuit(3)
-        qc.ry(theta,0)
-        qc.ch(0,2,ctrl_state = '0')
-        qc.ch(0,1,ctrl_state = '1')
-        g2 = qc.to_gate()
-        return g1, g2
+        qc1 = QuantumCircuit(3)
+        qc1.ry(-theta, 0)
+        qc1.x(2)
+        qc1.s(2)
+        qc1.ch(0, 2, ctrl_state="0")
+        qc1.x(2)
+        qc1.x(1)
+        qc1.ch(0, 1, ctrl_state="1")
+        qc1.x(1)
+        prep_gate_1 = qc1.to_gate()
+
+        qc2 = QuantumCircuit(3)
+        qc2.ry(theta, 0)
+        qc2.ch(0, 2, ctrl_state="0")
+        qc2.ch(0, 1, ctrl_state="1")
+        prep_gate_2 = qc2.to_gate()
+
+        return prep_gate_1, prep_gate_2
     
     elif order == 6:
-        phi_1 = np.arcsin(np.sqrt(9/11)) 
-        phi_2 = np.arcsin(-3 / np.sqrt(10)) 
-        
-        qc = QuantumCircuit(3)
-        qc.x(2)
-        qc.s(2)
-        qc.h(2)
-        qc.ry(2*phi_1,1)
-        qc.cry(-2*phi_2,1,0,ctrl_state = '0')
-        qc.ccx(0,2,1,ctrl_state = '10')
-        g1 = qc.to_gate()
-        
-        qc = QuantumCircuit(3)
-        qc.h(2)
-        qc.ry(2*phi_1,1)
-        qc.cry(2*phi_2,1,0,ctrl_state = '0')
-        qc.ccx(0,2,1,ctrl_state = '10')
-        g2 = qc.to_gate()
-        return g1,g2 
-    
-    else: # order = 14
-        # Preparing coefficients, ignoring the alternating sign 
-        p = order//2 # replacing 14 by 7 
-        c = np.zeros(p)
-        for j in range(1,p+1):
-            c[j-1] = prod([(p-j+s)/(p+s) for s in range(1,j+1)])/j 
-        c = c/sum(c)   # normalizing. Exact value: sum(c) = 363/280
-        c = np.sqrt(c)
+        phi1 = np.arcsin(np.sqrt(9 / 11))
+        phi2 = np.arcsin(-3 / np.sqrt(10))
 
-        # Computing angles 
-        phi = np.zeros(p-1)
+        qc1 = QuantumCircuit(3)
+        qc1.x(2)
+        qc1.s(2)
+        qc1.h(2)
+        qc1.ry(2 * phi1, 1)
+        qc1.cry(-2 * phi2, 1, 0, ctrl_state="0")
+        qc1.ccx(0, 2, 1, ctrl_state="10")
+        prep_gate_1 = qc1.to_gate()
+
+        qc2 = QuantumCircuit(3)
+        qc2.h(2)
+        qc2.ry(2 * phi1, 1)
+        qc2.cry(2 * phi2, 1, 0, ctrl_state="0")
+        qc2.ccx(0, 2, 1, ctrl_state="10")
+        prep_gate_2 = qc2.to_gate()
+
+        return prep_gate_1, prep_gate_2
+
+    else: # order = 14
+        p = order // 2
+        coeffs = np.zeros(p)
+
+        # Preparing coefficients, ignoring the alternating sign 
+        for j in range(1, p + 1):
+            coeffs[j - 1] = prod([(p - j + s) / (p + s) for s in range(1, j + 1)]) / j
+        coeffs = coeffs / np.sum(coeffs)   # normalizing. Exact value: sum(c) = 363/280
+        coeffs = np.sqrt(coeffs)
+
+        # Computing rotation angles 
+        phi_vals = np.zeros(p - 1)
         a = 1
-        for j in range(p-1):
-            phi[j] = np.arccos(c[j]/a)
-            a = a*np.sin(phi[j])
+        for j in range(p - 1):
+            phi_vals[j] = np.arccos(coeffs[j] / a)
+            a *= np.sin(phi_vals[j])
             
-        # Preparing the gates
-        for k in range(2):
+        for idx in range(2):
             qc = QuantumCircuit(4)
-            if k == 0:
-                # qc.append(GlobalPhaseGate(np.pi/2),0)    # Introduce global phase
-                qc.x(0)                                    
+
+        # Initial phase adjustment
+            if idx == 0:
+                qc.x(0)
                 qc.s(0)
-                qc.x(0)      
-            else: 
-                phi = -phi 
+                qc.x(0)
+            else:
+                phi_vals = -phi_vals
             
-            qc.ry(2*phi[0],0)
-            qc.cry(2*phi[1],0,1)
-            qc.cry(-2*phi[2],1,0)
-            qc.append(RYGate(2*phi[3]).control(num_ctrl_qubits = 2,ctrl_state = '10'),[0,1,2])   # Control state label reversed
-            qc.cry(2*phi[4],2,0)
-            qc.append(RYGate(-2*phi[5]).control(num_ctrl_qubits = 2),[0,2,1])
+            qc.ry(2 * phi_vals[0], 0)
+            qc.cry(2 * phi_vals[1], 0, 1)
+            qc.cry(-2 * phi_vals[2], 1, 0)
+            qc.append(RYGate(2 * phi_vals[3]).control(2, ctrl_state="10"), [0, 1, 2])
+            qc.cry(2 * phi_vals[4], 2, 0)
+            qc.append(RYGate(-2 * phi_vals[5]).control(2), [0, 2, 1])
             
-            # Changing from gray code to regular binary
-            qc.cx(1,0)
-            qc.cx(2,0)
-            qc.cx(2,1)
-            
-            if k == 0:
+            # Convert Gray code to regular binary
+            qc.cx(1, 0)
+            qc.cx(2, 0)
+            qc.cx(2, 1)
+
+            # Final ancilla preparation 
+            if idx == 0:
                 qc.h(3)
-            else: 
+            else:
                 qc.x(3)
                 qc.h(3)
                 
-            qc.mcx([0,3],1, ctrl_state = '00')
-            qc.mcx([0,3],2,ctrl_state = '00')
-            qc.mcx([0,1,3],2,ctrl_state = '001')
+            qc.mcx([0, 3], 1, ctrl_state="00")
+            qc.mcx([0, 3], 2, ctrl_state="00")
+            qc.mcx([0, 1, 3], 2, ctrl_state="001")
             
-            if k == 0:
-                g1 = qc.to_gate()
-            else: 
-                g2 = qc.to_gate()
-        return g1, g2
+            if idx == 0:
+                prep_gate_1 = qc.to_gate()
+            else:
+                prep_gate_2 = qc.to_gate()
 
-def Block_enc(n:int, order:int) -> tuple[QuantumCircuit, int]:
-    """
-    Constructs the block encoding of a discretized differential operator for a given method order.
-
-    Parameters:
-        n: Number of qubits.
-        order: Order of the method. Supported values are 2, 4, 6 and 14.
-
-    Returns:
-        qc: The block-encoding circuit
-        anc: the number of ancillary qubits used.
-    """
-
-    if order == 2:
-        anc = 2  
-        k = -1 
-        g1,g2 = Prep(2)
-    elif order == 14:
-        anc = 4
-        k = -7
-        g1,g2 = Prep(14)
-    else: 
-        anc = 3
-        if order == 4:
-            k = -2
-            g1,g2 = Prep(4)
-        else:
-            k = -3
-            g1,g2 = Prep(6)
-
-    qc = QuantumCircuit(n+anc)
-    qc.append(g1,range(anc))
-    qc.append(Phase_adder(anc,n,k), range(n+anc))
-    qc.append(g2.inverse(), range(anc))
-
-    return qc, anc
-
-def QSVT(n:int, Phi1:np.array, Phi2:np.array, method:str, order:int) -> QuantumCircuit:
-    """ Constructs a two-angle QSVT circuit using a chosen method and order.
-
-    Parameters:
-        n: Number of qubits.
-        Phi1: Sequence of phase angles for QSVT.
-        Phi2: Sequence of phase angles for QSVT. Must be one element longer than Phi1.
-        method: Supported values:
-                  - "pure_diff": pure diffusion
-                  - "pure_adv": pure advection
-                  - "adv_diff": combined advection-diffusion
-        order: Order of the method. Supported values are 2, 4, 6 and 14.
-
-    Returns:
-        circ: QSVT circuit implementing the transformation.
-    """
-
-    U, qr0_anc = Block_enc(n, order)
-
-    qr_anc = QuantumRegister(2, name = 'anc')
-    qr0 = QuantumRegister(qr0_anc)
-    qr1 = QuantumRegister(n)
-    circ = QuantumCircuit(qr_anc,qr0, qr1)
-
-    # Preparing the appropriate linear combinations 
-    circ.h(qr_anc[0])   
-    if method != "pure_diff":               
-        circ.s(qr_anc[0])
-    circ.h(qr_anc[1])
-    
-    circ.append(QFT(n),qr1[:])
-
-    CX_gate = MCXGate(num_ctrl_qubits = qr0_anc, ctrl_state = qr0_anc*'0')
-
-    if len(Phi1) > len(Phi2):
-        Phi3 = Phi2
-        Phi2 = Phi1
-        Phi1 = Phi3
-    l = len(Phi1)
-    
-    # Setting up the controlled circuit first 
-    circ.append(U.inverse().control(1),[qr_anc[0]]+qr0[:]+qr1[:])
-    circ.append(CX_gate,qr0[:]+qr_anc[1:])
-    circ.crz(2*Phi2[l],qr_anc[0],qr_anc[1],ctrl_state = '1')
-    circ.append(CX_gate,qr0[:]+qr_anc[1:])
-    
-    # The QSVT loop 
-    s = 1
-    for k in range(l-1,-1,-1):
-        if s == 1:
-            circ.append(U, qr0[:] + qr1[:])
-            s = 0
-        else:
-            circ.append(U.inverse(),qr0[:] + qr1[:])
-            s = 1
-
-        circ.append(CX_gate,qr0[:] + qr_anc[1:])
-        circ.crz(2*Phi1[k], qr_anc[0], qr_anc[1], ctrl_state = '0')
-        circ.crz(2*Phi2[k], qr_anc[0], qr_anc[1], ctrl_state = '1')
-        circ.append(CX_gate,qr0[:] + qr_anc[1:]) 
-
-    circ.h(qr_anc[0])
-    circ.h(qr_anc[1]) 
-    circ.append(QFT(n,inverse = True),qr1[:])
-
-    return circ
+        return prep_gate_1, prep_gate_2
 
 
-def QSVT_single(n:int, Phi:np.array, order:int) -> QuantumCircuit:
-    """
-    Constructs a simplified single-angle QSVT circuit.
+def block_encoding(num_qubits: int, order: int) -> tuple[QuantumCircuit, int]:
+    """Construct the block encoding for a discretized differential operator.
 
     Args:
-        n: Number of qubits.
-        Phi1: Sequence of phase angles for QSVT.
-        order: Order of the method. Supported values are 2, 4, 6 and 14.
+        num_qubits: Number of qubits.
+        order: Finite-difference order (2, 4, 6, or 14).
 
     Returns:
-        circ: QSVT circuit implementing the transformation.
+        A tuple containing the block-encoding circuit and the number of ancillary qubits used.
+    """
+
+    # Determine ancilla count and phase-shift constant
+    if order == 2:
+        num_ancillas = 2
+        phase_shift = -1
+        prep_gate_1, prep_gate_2 = prep(2)
+    elif order == 14:
+        num_ancillas = 4
+        phase_shift = -7
+        prep_gate_1, prep_gate_2 = prep(14)
+    else:
+        num_ancillas = 3
+        if order == 4:
+            phase_shift = -2
+            prep_gate_1, prep_gate_2 = prep(4)
+        else:
+            phase_shift = -3
+            prep_gate_1, prep_gate_2 = prep(6)
+
+    block_circuit = QuantumCircuit(num_qubits + num_ancillas)
+
+    block_circuit.append(prep_gate_1, range(num_ancillas))
+    block_circuit.append(phase_adder(num_ancillas, num_qubits, phase_shift), range(num_qubits + num_ancillas))
+    block_circuit.append(prep_gate_2.inverse(), range(num_ancillas))
+
+    return block_circuit, num_ancillas
+
+
+def qsvt(num_qubits: int, angle_seq_1: np.ndarray, angle_seq_2: np.ndarray, method: str, order: int) -> QuantumCircuit:
+    """Construct a two-angle QSVT circuit.
+
+    Args:
+        num_qubits: Number of qubits.
+        angle_seq_1: First list of phase angles.
+        angle_seq_2: Second list of phase angles (must be one longer).
+        method: One of "pure_diff", "pure_adv", "adv_diff".
+        order: Finite-difference order. (2, 4, 6, or 14)
+
+    Returns:
+        QSVT circuit implementing the two-angle QSVT protocol.
+    """
+
+    block_unitary, num_anc0 = block_encoding(num_qubits, order)
+
+    qr_anc = QuantumRegister(2, name = "anc")
+    qr0 = QuantumRegister(num_anc0)
+    qr1 = QuantumRegister(num_qubits)
+    circuit = QuantumCircuit(qr_anc,qr0, qr1)
+
+    # Prepare the appropriate linear combinations 
+    circuit.h(qr_anc[0])   
+    if method != "pure_diff":               
+        circuit.s(qr_anc[0])
+    circuit.h(qr_anc[1])
+    
+    circuit.append(QFT(num_qubits), qr1[:])
+
+    cx_gate = MCXGate(num_ctrl_qubits = num_anc0, ctrl_state = num_anc0 * "0")
+
+    if len(angle_seq_1) > len(angle_seq_2):
+        angle_seq_1, angle_seq_2 = angle_seq_2, angle_seq_1
+    num_phases = len(angle_seq_1)
+
+    # Initial controlled-step
+    circuit.append(block_unitary.inverse().control(1), [qr_anc[0]] + qr0[:] + qr1[:])
+    circuit.append(cx_gate, qr0[:] + qr_anc[1:])
+    circuit.crz(2 * angle_seq_2[num_phases], qr_anc[0], qr_anc[1], ctrl_state = "1")
+    circuit.append(cx_gate, qr0[:] + qr_anc[1:])
+    
+    # Main QSVT loop 
+    use_u = True
+    for k in range(num_phases - 1, -1, -1):
+        if use_u:
+            circuit.append(block_unitary, qr0[:] + qr1[:])
+        else:
+            circuit.append(block_unitary.inverse(), qr0[:] + qr1[:])
+        use_u = not use_u
+
+        circuit.append(cx_gate, qr0[:] + qr_anc[1:])
+        circuit.crz(2 * angle_seq_1[k], qr_anc[0], qr_anc[1], ctrl_state = "0")
+        circuit.crz(2 * angle_seq_2[k], qr_anc[0], qr_anc[1], ctrl_state = "1")
+        circuit.append(cx_gate, qr0[:] + qr_anc[1:]) 
+
+    circuit.h(qr_anc[0])
+    circuit.h(qr_anc[1]) 
+    circuit.append(QFT(num_qubits, inverse = True),qr1[:])
+
+    return circuit
+
+
+def qsvt_single(num_qubits: int, angle_seq: np.array, order: int) -> QuantumCircuit:
+    """
+    Construct a simplified single-angle QSVT circuit.
+
+    Args:
+        num_qubits: Number of qubits.
+        angle_seq: Sequence of phase angles.
+        order: Finite-difference order. (2, 4, 6 or 14).
+
+    Returns:
+        circuit: QSVT circuit implementing the single-angle QSVT protocol.
 
     Note:
         Single-angle QSVT is only used for pure diffusion, so a method input is not required. 
     """
 
-    U, qr0_anc = Block_enc(n, order)
+    block_unitary, num_anc0 = block_encoding(num_qubits, order)
 
-    qr_anc = QuantumRegister(1, name = 'anc')
-    qr0 = QuantumRegister(qr0_anc)
-    qr1 = QuantumRegister(n)
-    circ = QuantumCircuit(qr_anc,qr0, qr1)
+    qr_anc = QuantumRegister(1, name="anc")
+    qr0 = QuantumRegister(num_anc0)
+    qr1 = QuantumRegister(num_qubits)
+    circuit = QuantumCircuit(qr_anc, qr0, qr1)
 
-    circ.h(qr_anc[0])   
-    circ.append(QFT(n),qr1[:])
+    circuit.h(qr_anc[0])   
+    circuit.append(QFT(num_qubits), qr1[:])
 
-    CX_gate = MCXGate(num_ctrl_qubits = qr0_anc, ctrl_state = qr0_anc*'0')
+    cx_gate = MCXGate(num_ctrl_qubits=num_anc0, ctrl_state=num_anc0 * "0")
     
     # The QSVT loop 
-    l = len(Phi)
-    s = 1
-    for k in range(l-1,-1,-1):
-        if s == 1:
-            circ.append(U, qr0[:] + qr1[:])
-            s = 0
+    num_phases = len(angle_seq)
+    use_u = True
+    for k in range(num_phases - 1, -1, -1):
+        if use_u:
+            circuit.append(block_unitary, qr0[:] + qr1[:])
         else:
-            circ.append(U.inverse(),qr0[:] + qr1[:])
-            s = 1
+            circuit.append(block_unitary.inverse(), qr0[:] + qr1[:])
+        use_u = not use_u
 
-        circ.append(CX_gate,qr0[:] + qr_anc[:])
-        circ.rz(2*Phi[k], qr_anc[0])
-        circ.append(CX_gate,qr0[:] + qr_anc[:]) 
+        circuit.append(cx_gate, qr0[:] + qr_anc[:])
+        circuit.rz(2*angle_seq[k], qr_anc[0])
+        circuit.append(cx_gate, qr0[:] + qr_anc[:]) 
 
-    circ.h(qr_anc[0])
-    circ.append(QFT(n,inverse = True),qr1[:])
+    circuit.h(qr_anc[0])
+    circuit.append(QFT(num_qubits, inverse=True), qr1[:])
 
-    return circ
+    return circuit
