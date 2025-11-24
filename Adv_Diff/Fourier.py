@@ -3,279 +3,244 @@ import numpy as np
 from typing import Callable, List, Tuple
 
 """ 
-This module contains functions Fourier_coef, Fourier_approx, Fourier_coef_2d, and Fourier_approx_2d.
+This module provides tools for computing one-dimensional and two-dimensional Fourier coefficients,
+as well as Fourier series solutions to the one-dimensional and two-dimensional advection–diffusion equation
+ contains functions Fourier_coef, Fourier_approx, Fourier_coef_2d, and Fourier_approx_2d.
 
-Fourier_coef and Fourier_coef_2d return the Fourier coefficients for a given 1-dimensional or 2-dimensional function, respectively.
-
-Fourier_approx and Fourier_approx_2d construct functions that provide Fourier series solutions to the 1-dimensional or 2-dimensional 
-    advection–diffusion equation, respectively.
-
+Functions:
+fourier_coefficients, fourier_coefficients_2d: Return the Fourier coefficients for a given 1-dimensional or 2-dimensional function, respectively.
+fourier_approximation, fourier_approximation_2d: Construct functions that provide Fourier series solutions to the 1-dimensional or 2-dimensional 
+                                                 advection–diffusion equation, respectively.
 """  
 
-def Fourier_coef(f: Callable, eps: float, d: float, N:int=None) -> tuple[float, list, list]:
-    """ Return the Fourier coefficients for a function f defined on the interval [0, d]
+def fourier_coefficients(f: Callable, tolerance: float, domain_length: float, max_order: int | None = None) -> tuple[float, np.ndarray, np.ndarray]:
+    """ Compute the Fourier coefficients of a function f(x) defined on the interval [0, domain_length]
 
-    This function calculates the Fourier series coefficients up to the N-th Fourier mode or,
-    if `N` is not provided, it adaptively determines the number of terms required to achieve a
-    given approximation error `eps`.
+    If `max_order` is not provided, coefficients are computed adaptively until
+    the maximum error satisfies `tolerance`. The number of fourier terms needed to converge is printed
+
+    The approximation is constructed as:
+    f(x) ≈ c + Σ_{k=1}^N  a_k cos(2π k x / L) + Σ_{k=1}^N  b_k sin(2π k x / L)
+    where L is the domain length.
 
     Args:
-        f: A function defined on [0, d].
-        eps: Desired maximum absolute error between the function and its truncated Fourier approximation.
-        d: Length of the interval [0, d] over which f is defined.
-        N: Optional integer specifying the number of Fourier terms to compute. If omitted, the function adaptively determines
-           the number of terms required to achieve the desired error `eps`.
+        f: Function f(x) defined on [0, domain_length].
+        tolerance: Maximum absolute approximation error for adaptive mode.
+        domain_length: Length of the interval [0, domain_length] over which f is defined.
+        Optional maximum Fourier mode. If None, adaptive detection
+            is used.
+        max_order: Optional maximum Fourier mode. If None, adaptive detection is used.
 
     Returns:
-        c: The constant Fourier coefficient.
-        a: List of cosine coefficients a_k for k = 1, ..., N-1 (or adaptively chosen N).
-        b: List of sine coefficients b_k for k = 1, ..., N-1 (or adaptively chosen N).
-
-    Outputs:
-        The number of fourier terms needed to converge.
-
-    Notes:
-        - The approximation f_N(x) is constructed as:
-              f_N(x) = c + sum_{k=1}^{N-1} [a_k * cos(2πkx/d) + b_k * sin(2πkx/d)]
+        A tuple containing:
+        - The constant Fourier coefficient.
+        - Array of cosine coefficients a_k for k = 1, ..., N
+        - Array of sine coefficients b_k for k = 1, ..., N
     """
 
-    def compute_coef(k):
-        """Compute the k-th cosine and sine Fourier coefficients a_k and b_k."""
+    def compute_mode_coefficients(k):
+        """Compute the cosine and sine coefficients for mode k."""
 
         # Define the integrand for cosine and sine terms
-        def g(x, t):
-            if t == 0:
-                return f(x) * np.cos(2 * np.pi * k * x / d)
-            else:
-                return f(x) * np.sin(2 * np.pi * k * x / d)
+        def integrand_cos(x):
+            return f(x) * np.cos(2 * np.pi * k * x / domain_length)
+
+        def integrand_sin(x):
+            return f(x) * np.sin(2 * np.pi * k * x / domain_length)
 
         # Compute integrals
-        a_k = quad(g, 0, d, args=(0,))[0] / (d / 2)
-        b_k = quad(g, 0, d, args=(1,))[0] / (d / 2)
+        cos_coeff_k = quad(integrand_cos, 0, domain_length)[0] * (2.0 / domain_length)
+        sin_coeff_k = quad(integrand_sin, 0, domain_length)[0] * (2.0 / domain_length)
 
-        return a_k, b_k
+        return cos_coeff_k, sin_coeff_k
 
-    # Compute the zeroth coefficient.
-    c = quad(f, 0, d)[0] / d
-    a = []
-    b = []
+    # Compute zeroth coefficient.
+    constant_coeff = quad(f, 0, domain_length)[0] / domain_length
+    cos_coeffs, sin_coeffs = [], []
 
-    # === Non-adaptive mode: fixed number of coefficients ===
-    if N:
-        for k in range(1, N):
-            a_k, b_k = compute_coef(k)
-            a.append(a_k)
-            b.append(b_k)
-        return c, a, b
+    # --- Non-adaptive mode ---
+    if max_order is not None:
+        for k in range(1, max_order + 1):
+            cos_coeff_k, sin_coeff_k = compute_mode_coefficients(k)
+            cos_coeffs.append(cos_coeff_k)
+            sin_coeffs.append(sin_coeff_k)
+        return constant_coeff, np.array(cos_coeffs), np.array(sin_coeffs)
 
-    # === Adaptive mode: increase N until error < eps ===
-    N = 1
-
+    # --- Adaptive mode ---
     # Discretize the interval for error estimation
-    x_vals = np.linspace(0, d, 1000, endpoint=False)
-    f_vals = np.array([f(x) for x in x_vals])
+    x_grid = np.linspace(0, domain_length, 1000, endpoint=False)
+    f_grid = np.array([f(x) for x in x_grid])
 
     # Initialize approximation with just the constant coefficient
-    approx_vals = np.full_like(x_vals, fill_value=c, dtype=float)
-
+    approximation = np.full_like(x_grid, constant_coeff, dtype=float)
 
     max_iter = 500
-    while N <= max_iter :
+    k = 1
+    while k <= max_iter:
         #compute new pair of coefficients
-        a_k, b_k = compute_coef(N)
-        a.append(a_k)
-        b.append(b_k)
+        cos_coeff_k, sin_coeff_k = compute_mode_coefficients(k)
+        cos_coeffs.append(cos_coeff_k)
+        sin_coeffs.append(sin_coeff_k)
 
         # update the approximation values with this new term
-        n = 2 * np.pi * N / d
-        approx_vals += a_k * np.cos(n * x_vals) + b_k * np.sin(n * x_vals)
+        freq = 2 * np.pi * k / domain_length
+        approximation += cos_coeff_k * np.cos(freq * x_grid) + sin_coeff_k * np.sin(freq * x_grid)
 
         # check if we need more iterations to reach the error threshold.
-        error = np.max(np.abs(f_vals - approx_vals))
-        if error < eps:
-            print(f"\n-- FOURIER --\nNumber of Fourier coefficients needed: {N}\n")
-            return c, np.array(a), np.array(b)
-        
-        N += 1
+        error = np.max(np.abs(f_grid - approximation))
+        if error < tolerance:
+            print(f"\n-- FOURIER --\nConverged with {k} Fourier modes\n")
+            return constant_coeff, np.array(cos_coeffs), np.array(sin_coeffs)
+        k += 1
 
     print(f"\n-- FOURIER --\nFourier series did not converge within {max_iter} steps\n")
-    return c, np.array(a), np.array(b)  
+    return constant_coeff, np.array(cos_coeffs), np.array(sin_coeffs)  
 
-def Fourier_approx(c:float, a:list, b:list, d:float) -> Callable:
-    """ Constructs a time-evolving Fourier approximation function for a solution to the advection-diffusion equation.
-
-    This function returns a callable `g(x, t, c_adv, nu)` that evaluates the Fourier series solution at a given position `x`
-    and time `t`, for specified advection speed `c_adv` and diffusion coefficient `nu`. The approximation is based on the 
-    provided Fourier coefficients.
+def fourier_approximation(constant_coeff: float, cos_coeffs: np.array, sin_coeffs: np.array, domain_length: float) -> Callable:
+    """ Construct a callable evaluating the Fourier-series solution of the 1D advection–diffusion equation: u_t + c_adv * u_x = nu * u_xx
+        The solution is constructed as:
+        u(x, t) = c + Σ_{k=1}^N e^{-nu * n_k^2 * t} * [a_k * cos(n_k * (x − c_adv * t)) + b_k * sin(n_k * (x − c_adv * t))]
+        where n_k = 2πk / domain_length.
 
     Args:
-        c: Constant Fourier coefficient.
-        a: List of cosine coefficients a_k for k = 1, ..., N.
-        b: List of sine coefficients b_k for k = 1, ..., N.
-        d: Length of the interval [0, d] over which the Fourier series is defined.
+        constant_coeff: Zeroth Fourier coefficient c.
+        cos_coeffs: Array of cosine coefficients a_k for k = 1, ..., N.
+        sin_coeffs: Array of sine coefficients b_k for k = 1, ..., N.
+        domain_length: Length of the interval [0, domain_length] over which the Fourier series is defined.
 
     Returns:
-        g: A function g(x, t, c_adv, nu) representing the Fourier approximation to the solution of the advection-diffusion
-           equation at position x and time t. x can be an array of positions. 
-
-    Notes:
-        - The solution is constructed as:
-              u(x, t) = c + sum_{k=1}^{N-1} exp(-nu * n_k² * t) * [a_k * cos(n_k * (x - c_adv * t)) + b_k * sin(n_k * (x - c_adv * t))]
-          where n_k = 2πk / d.
-        - This representation assumes that the Fourier coefficients (c, a, b) describe the initial condition u(x, 0).
+        A function u(x, t, c_adv, nu) evaluating the solution.
     """
 
-    def g(x, t, c_adv, nu):
-        u = c
-        for k in range(len(a)):
-            n = 2 * np.pi * (k + 1) / d
-            u += np.exp(-nu * (n**2) * t) * (a[k] * np.cos(n * (x - c_adv * t)) + b[k] * np.sin(n * (x - c_adv * t))) 
+    def solution(x, t, c_adv, nu):
+        u = constant_coeff
+        for k in range(len(cos_coeffs)):
+            n_k = 2 * np.pi * (k + 1) / domain_length
+            u += np.exp(-nu * (n_k**2) * t) * (cos_coeffs[k] * np.cos(n_k * (x - c_adv * t)) + sin_coeffs[k] * np.sin(n_k * (x - c_adv * t))) 
         return u
-    return g
+    return solution
 
-def Fourier_coef_2d(f: Callable, eps: float, d: float, N: int = None) -> Tuple[float, np.ndarray, np.ndarray, List[Tuple[int, int]]]:
-    """ Return the Fourier coefficients for a function f defined on the interval [0, d]×[0, d]
 
-    This function calculates the Fourier series coefficients up to the N-th Fourier mode or,
-    if `N` is not provided, it adaptively determines the number of terms required to achieve a
-    given approximation error `eps`.
+def fourier_coefficients_2d(f: Callable, tolerance: float, domain_length: float, max_order: int | None = None) -> Tuple[float, np.array, np.array, List[Tuple[int, int]]]:
+    """ Compute 2D Fourier coefficients of f(x, y) on [0, domain_length] × [0, domain_length].
+
+    The representation is:
+    (x, y) ≈ c + Σ A_{n1,n2} * cos(ω(n1 * x + n2 * y)) + Σ B_{n1,n2} * sin(ω(n1 * x + n2 * y))
+
+    with ω = 2π / domain_length and modes (n1, n2) selected so that n1 ≥ 0 and if n1 = 0 then n2 > 0
 
     Args:
-        f: A function defined on [0, d]×[0, d].
-        eps: Target maximum absolute error in adaptive mode
-        d: Domain size in both x and y directions.
-        N: Optional integer specifying the number of Fourier terms to compute. If omitted, the function adaptively determines
-           the number of terms required to achieve the desired error `eps`.
+        f: Function f(x, y).
+        tolerance: Target maximum absolute error for adaptive mode
+        domain_length: Domain size in both x and y directions.
+        max_order: Optional integer specifying the number of Fourier terms to compute. If omitted, the function adaptively determines
+           the number of terms required to achieve the desired tolerance.
     
     Outputs:
         The number of fourier terms needed to converge.       
 
     Returns:
-        c: The constant Fourier coefficient.
-        A: Cosine coefficients.
-        B: Sine coefficients.
-        modes: List of (n1, n2) mode indices.
+    Tuple containing:
+        - The constant Fourier coefficient, c.
+        - Array of Cosine coefficients, A.
+        - Array of Sine coefficients, B.
+        - List of (n1, n2) mode indices.
     """
 
-    omega = 2 * np.pi / d
+    omega = 2 * np.pi / domain_length
 
     # Compute the zeroth coefficient.
-    c = dblquad(lambda y, x: f(x, y), 0.0, d, lambda _: 0.0, lambda _: d)[0] / (d * d)
+    constant_coeff = dblquad(lambda y, x: f(x, y), 0, domain_length, lambda _: 0, lambda _: domain_length)[0] / (domain_length ** 2)
 
-    def compute_coef(n1: int, n2: int) -> Tuple[float, float]:
-        A_n = dblquad(lambda y, x: f(x, y) * np.cos(omega * (n1 * x + n2 * y)), 0.0, d, lambda _: 0.0, lambda _: d)[0] * (2.0 / (d * d))
-        B_n = dblquad(lambda y, x: f(x, y) * np.sin(omega * (n1 * x + n2 * y)), 0.0, d, lambda _: 0.0, lambda _: d)[0] * (2.0 / (d * d))
-        return A_n, B_n
+    def compute_mode_coefficients(n1: int, n2: int) -> Tuple[float, float]:
+        """Compute the cosine and sine coefficients for mode (n1, n2)."""
+        integrand_cos = lambda y, x: f(x, y) * np.cos(omega * (n1 * x + n2 * y))
+        integrand_sin = lambda y, x: f(x, y) * np.sin(omega * (n1 * x + n2 * y))
+        cos_coeff_n = dblquad(integrand_cos, 0, domain_length, lambda _: 0, lambda _: domain_length)[0] * (2 / (domain_length ** 2))
+        sin_coeff_n = dblquad(integrand_sin, 0, domain_length, lambda _: 0, lambda _: domain_length)[0] * (2 / (domain_length ** 2))
+        return cos_coeff_n, sin_coeff_n
 
-    # === Non-adaptive mode: fixed number of coefficients ===
-    if N:
-        A_list, B_list, modes = [], [], []
-        for n1 in range(0, N + 1):
-            for n2 in range(-N, N + 1):
+    # --- Non-adaptive mode: fixed number of coefficients ---
+    cos_coeffs, sin_coeffs, modes = [], [], []
+    if max_order is not None:
+        for n1 in range(0, max_order + 1):
+            for n2 in range(-max_order, max_order + 1):
                 if n1 == 0 and n2 <= 0:
                     continue
-                A_n, B_n = compute_coef(n1, n2)
-                A_list.append(A_n)
-                B_list.append(B_n)
+                cos_coeff_n, sin_coeff_n = compute_mode_coefficients(n1, n2)
+                cos_coeffs.append(cos_coeff_n)
+                sin_coeffs.append(sin_coeff_n)
                 modes.append((n1, n2))
-        return c, np.array(A_list), np.array(B_list), modes
+        return constant_coeff, np.array(cos_coeffs), np.array(sin_coeffs), modes
 
-    # === Adaptive mode: increase N until error < eps ===
-    x_vals = np.linspace(0.0, d, 1000, endpoint=False)
-    y_vals = np.linspace(0.0, d, 1000, endpoint=False)
-    X, Y = np.meshgrid(x_vals, y_vals, indexing="xy")
-    f_vals = f(X, Y)
+    # --- Adaptive mode: increase N until error < eps ---
+    x_grid = np.linspace(0, domain_length, 200, endpoint=False)
+    y_grid = np.linspace(0, domain_length, 200, endpoint=False)
+    X, Y = np.meshgrid(x_grid, y_grid, indexing="xy")
+    f_grid = f(X, Y)
 
-    max_iter = 25                     # Reduced to bound running time.
-    
-    approx_vals = np.full_like(f_vals, fill_value=c, dtype=float)
-    modes = []
-    A_list, B_list = [], []
-    N = 1
-    while N < max_iter +1:
-        L1 = [(j,N) for j in range(N+1)]
-        L2 = [(N,j) for j in range(N-1,-N-1,-1)]
-        L3 = [(j,-N) for j in range(N-1,0,-1)]
-        L = L1+L2+L3 
-        for nab in L:
-            A_n, B_n = compute_coef(*nab)
-            A_list.append(A_n)
-            B_list.append(B_n)
-            modes.append(nab)
-            phase = omega * (nab[0] * X + nab[1] * Y)
-            approx_vals += A_n * np.cos(phase) + B_n * np.sin(phase)
-        er = np.max(np.abs(f_vals - approx_vals))
-        print("eps",eps)
-        if er < eps:
-            print(f"-- FOURIER --\nNumber of Fourier coefficients needed: {len(modes)}\n")
-            return c, np.array(A_list), np.array(B_list), modes
-        else: 
-            N += 1
+    max_iter = 25
+    approximation = np.full_like(f_grid, constant_coeff, dtype=float)
 
-    print(f"\n-- FOURIER --\n2D Fourier series did not reach error < {eps} within N={max_iter}.\n")
-    return c, np.array(A_list), np.array(B_list), modes 
+    # storage for final result only
+    cos_coeffs, sin_coeffs, modes = [], [], []
 
-    
-    x_vals = np.linspace(0.0, d, 1000, endpoint=False)
-    y_vals = np.linspace(0.0, d, 1000, endpoint=False)
-    X, Y = np.meshgrid(x_vals, y_vals, indexing="xy")
-    f_vals = f(X, Y)
-
-    max_iter = 500
     for N in range(1, max_iter + 1):
-        approx_vals = np.full_like(f_vals, fill_value=c, dtype=float)
-        modes = []
-        A_list, B_list = [], []
-
-        for n1 in range(0, N + 1):
-            for n2 in range(-N, N + 1):
+        new_modes = []
+        # horizontal strip
+        for n2 in range(-N, N + 1):
+            if N == 0 and n2 <= 0:
+                continue
+            new_modes.append((N, n2))
+        # vertical strip
+        for n1 in range(0, N):
+            for n2 in [-N, N]:
                 if n1 == 0 and n2 <= 0:
                     continue
-                A_n, B_n = compute_coef(n1, n2)
-                A_list.append(A_n)
-                B_list.append(B_n)
-                modes.append((n1, n2))
-                phase = omega * (n1 * X + n2 * Y)
-                approx_vals += A_n * np.cos(phase) + B_n * np.sin(phase)
+                new_modes.append((n1, n2))
 
-        if np.max(np.abs(f_vals - approx_vals)) < eps:
-            print(f"-- FOURIER --\nNumber of Fourier coefficients needed: {N}\n")
-            return c, np.array(A_list), np.array(B_list), modes
+        # compute coefficients and update approximation incrementally
+        for (n1, n2) in new_modes:
+            cos_coeff, sin_coeff = compute_mode_coefficients(n1, n2)
 
-    print(f"\n-- FOURIER --\n2D Fourier series did not reach error < {eps} within N={max_iter}.\n")
-    return c, np.array(A_list), np.array(B_list), modes 
+            cos_coeffs.append(cos_coeff)
+            sin_coeffs.append(sin_coeff)
+            modes.append((n1, n2))
 
-def Fourier_approx_2d(c: float, A: np.ndarray, B: np.ndarray, modes: List[Tuple[int, int]], d: float) -> Callable:
-    """
-    Constructs a time-evolving Fourier approximation function for a solution to the 2-dimensional advection-diffusion equation.
+            phase = omega * (n1 * X + n2 * Y)
+            approximation += cos_coeff * np.cos(phase) + sin_coeff * np.sin(phase)
 
-    This function returns a callable `g(x, y, t, nu, v1, v2)` that evaluates the Fourier series solution at a given position `(x,y)`
-    and time `t`, for specified advection speeds `v1`, `v2` and diffusion coefficient `nu`. The approximation is based on the 
-    provided Fourier coefficients.
+        # convergence check
+        if np.max(np.abs(f_grid - approximation)) < tolerance:
+            print(f"-- FOURIER --\nNumber of Fourier coefficients needed: {len(modes)}\n")
+            return constant_coeff, np.array(cos_coeffs), np.array(sin_coeffs), modes
+        
+    print(f"\n-- FOURIER --\n2D Fourier series did not reach error < {tolerance} within N={max_iter}.\n")
+    return constant_coeff, np.array(cos_coeffs), np.array(sin_coeffs), modes
+
+def fourier_approximation_2d(constant_coeff: float, cos_coeffs: np.array, sin_coeffs: np.array, modes: List[Tuple[int, int]], domain_length: float) -> Callable:
+    """Construct the Fourier-series solution of the 2D advection–diffusion equation u_t + v1 * u_x + v2 * u_y = nu * Δu
+
+    The solution is constructed as:
+        u(x, y, t) = c + Σ exp(-nu * ω² * (n1² + n2²) * t) * [A_{n1, n2} * cos(φ) + B_{n1, n2} * sin(φ)]
+        where φ = ω * ((n1 * x + n2 * y) - (n1 * v1 + n2 * v2) * t) and ω = 2π / domain_length.
 
     Args:
-        c: Constant Fourier coefficient.
-        A: Cosine coefficients.
-        B: Sine coefficients.
-        modes: List of (n1, n2) mode indices.
-        d: Domain size.
+        constant_coeff: Zeroth coefficient, c.
+        cos_coeffs: Cosine coefficients A.
+        sin_coeffs: Sine coefficients B.
+        modes: List of index pairs (n1, n2).
+        domain_length: Domain size.
 
     Returns:
-        g: Function that evaluates the Fourier approximation at given points.
-
-    Notes:
-        - The solution is constructed as:
-              u(X, Y, t) = c + Σ exp(-nu * ω² * (n1² + n2²) * t) * [A_n cos(φ) + B_n sin(φ)]
-          where φ = ω * ((n1 * X + n2 * Y) - (n1 * v1 + n2 * v2) * t)
-                ω = 2π / d
-
+        A function u(X, Y, t, nu, v1, v2) evaluating the solution.
     """
-    omega = 2 * np.pi / d
-    def g(X, Y, t, nu, v1, v2):
-        u = np.full_like(X, fill_value=c, dtype=float)
-        for (n1, n2), A_n, B_n in zip(modes, A, B):
+    omega = 2 * np.pi / domain_length
+    def solution(X, Y, t, nu, v1, v2):
+        u = np.full_like(X, constant_coeff, dtype=float)
+        for (n1, n2), cos_coeff_n, sin_coeff_n in zip(modes, cos_coeffs, sin_coeffs):
             exp_factor = np.exp(-nu * (omega ** 2) * (n1 ** 2 + n2 ** 2) * t)
             phase = omega * ((n1 * X + n2 * Y) - (n1 * v1 + n2 * v2) * t)
-            u += exp_factor * (A_n * np.cos(phase) + B_n * np.sin(phase))
+            u += exp_factor * (cos_coeff_n * np.cos(phase) + sin_coeff_n * np.sin(phase))
         return u
-    return g
+    return solution
