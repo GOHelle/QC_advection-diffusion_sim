@@ -16,12 +16,15 @@ where $u:\[0,T\]\times\[0,d\]\rightarrow \mathbb{R}$ is the scalar field, $c$ is
 where $u:\[0,T\]\times\[0,d\]^2\rightarrow \mathbb{R}$ is the scalar field, $\mathbf{c}=(c_1,c_2)$ the advection velocity vector, and $\nu$ the diffusion coefficient.
 
 ---
-
-The repository is organized into a small number of Python modules, each handling a different part of the simulation pipeline:  
+This repository is organized around the Adv_Diff folder, which contains the main implementation of the quantum advection–diffusion simulation framework. is organized into a small number of Python modules, each handling a different part of the simulation pipeline:
 - Fourier-based approximations for baseline,  
 - angle sequence construction for QSVT,  
 - QSVT circuit construction for advection-diffusion evolution, and  
 - simulation drivers for 1D and 2D cases.
+
+In addition to the main Adv_Diff directory, there are supporting modules located at the top level of the repository:
+- A usage example demonstrating how to import and run the simulation routines from the Adv_Diff module. (example_code.py)
+- A collection of initial-condition functions along with helper methods for running, visualizing, and comparing simulations for different orders. (test_functions.py)
 
 ## Overview
 
@@ -36,7 +39,7 @@ The repository is organized into a small number of Python modules, each handling
 
 - **`Adv_Diff_QC.py`**  
   Builds the QSVT quantum circuits that implement the block-encoded advection-diffusion operator.  
-  - constructs state preparation gates and block encoding for given method orders (2,4 or 6).  
+  - constructs state preparation gates and block encoding for given method orders (2, 4, 6 or 14).  
   - Separate routines exist for single-angle and dual-angle-sequence QSVT circuits.  
 
 - **`Simulation_QC.py`**  
@@ -66,30 +69,30 @@ import numpy as np
 from Adv_Diff import Simulation_QC
 
 # specify parameters for 1D simulation
-n = 6                                       # Number of spatial qubits
-T = [0.25, 0.5, 0.75]                       # List of final times (could also be a single value)
-c = 2                                       # Advection speed parameter
-nu = 0.1                                    # Diffusion coefficient
-d = 4                                       # Length of spatial domain
-init_f = lambda x: np.exp(-10*(x-4/3)**2)   # Initial function
-shots = 10**6                               # Number of measurement shots
-Complexity = True                           # Whether or not to display complexity data
-order = 4                                   # Method order
-eps = 10**(-6)                              # error tolerance when deriving angle sequences
-sim_type  = "both"                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
-exact_sol = True                            # Whether or not to compute and plot the exact solution
-plot = True                                 # Whether or not to plot results
+num_qubits = 6                                      # Number of spatial qubits
+times = [0.25, 0.5, 0.75]                           # List of final times (could also be a single value)
+adv_speed = 2                                       # Advection speed parameter
+diff_coeff = 0.1                                    # Diffusion coefficient
+domain_length = 4                                   # Length of spatial domain
+init_f = lambda x: np.exp(-10*(x-4/3)**2)           # Initial function
+shots = 10**6                                       # Number of measurement shots
+report_complexity = True                            # Whether or not to display complexity data
+order = 4                                           # Method order
+tolerance = 10**(-6)                                # error tolerance when deriving angle sequences
+sim_type  = "both"                                  # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
+compute_exact = True                                # Whether or not to compute and plot the exact solution
+plot = True                                         # Whether or not to plot results
 
 # Run 1D simulation with specified parameters. 
-Simulation_QC.Sim(n, T, c, nu, d, init_f, shots, Complexity, order, eps, sim_type, exact_sol, plot)
+Simulation_QC.simulate_adv_diff(num_qubits, times, adv_speed, diff_coeff, domain_length, init_f, shots, report_complexity, order, tolerance, sim_type, compute_exact, plot)
 ```
 
 This will produce the plot below
 
 ![Example 1](1D_example.png)
 
-For each value in T, it will also print the succes rate, complexity, max error and some information printed by pyqsp's solver. Each simulation is separated by a header stating the current value of T. Each section of printed information is also indicated by a clear header.
-When the simulation is complete for all the values in T, a table is displayed which summarises, the printed information.
+It will print the number of fourier modes needed for the exact solution to converge, and for each value in 'times', it will print the succes rate, complexity, max error and some information from the pyqsp's solver. Each simulation is separated by a header stating the final time. Each section of printed information is also indicated by a clear header.
+When the simulation is complete for all final times, a table is displayed which summarises, the printed information.
 
 #### 2D Simulation Example
 
@@ -99,30 +102,30 @@ import numpy as np
 from Adv_Diff_new import Simulation_QC_2D
 
 # specify parameters for 2D simulation
-n = 5                                                       # Number of qubits per spatial dimension
-T = 1                                                       # Final time for evolution
-c1 = 1                                                      # Advection speed parameter in x direction
-c2 = 2                                                      # Advection speed parameter in y direction
-nu = 0.1                                                    # Diffusion coefficient
-d = 4                                                       # Length of each spatial dimension
+num_qubits = 6                                              # Number of qubits per spatial dimension
+time = 1                                                    # Final time for evolution
+adv_speed_x = 1                                             # Advection speed parameter in x direction
+adv_speed_y = 1                                             # Advection speed parameter in y direction
+diff_coeff = 0.05                                           # Diffusion coefficient
+domain_length = 4                                           # Length of each spatial dimension
 init_f = lambda X, Y: np.sin(np.pi * (0.5 * X + Y)) + 1     # Initial function
-shots = 10**7                                               # Number of measurement shots
-Complexity = True                                           # Whether or not to display complexity data
+shots = 10**8                                               # Number of measurement shots
+report_complexity = True                                    # Whether or not to display complexity data
 order = 2                                                   # Method order
-eps = 10**(-6)                                              # error tolerance when deriving angle sequences
+tolerance = 10**(-6)                                        # error tolerance when deriving angle sequences
 sim_type  = "both"                                          # Type of simulation: "meas" for measurement-based, "sv" for statevector-based, or "both"
-exact_sol = True                                            # Whether or not to compute and plot the exact solution
+compute_exact = True                                        # Whether or not to compute and plot the exact solution
 plot = True                                                 # Whether or not to plot results
 
 # Run 2D simulation with specified parameters. 
-Simulation_QC_2D.Sim(n, T, c1, c2, nu, d, init_f, shots, Complexity, order, eps, sim_type, exact_sol, plot)
+Simulation_QC_2D.simulate_adv_diff_2d(num_qubits, time, adv_speed_x, adv_speed_y, diff_coeff, domain_length, init_f, shots, report_complexity, order, tolerance, sim_type, compute_exact, plot)
 ```
 
 This will produce the plot below
 
 ![Example 2](2D_example.png)
 
-It will also print the succes rate, complexity, max error and some information printed by pyqsp's solver. Each section of printed information is indicated by a clear header.
+It will also print the number of Fourier modes, succes rate, complexity, max error and some information printed by pyqsp's solver. Each section of printed information is indicated by a clear header.
 
 ## Dependencies
 
@@ -133,5 +136,5 @@ It will also print the succes rate, complexity, max error and some information p
 - tabulate
 - typing
 
-All of the above can simply be installed using pip install.
+All of the above can be installed using pip install.
 For details on the pyqsp package see https://github.com/ichuang/pyqsp
