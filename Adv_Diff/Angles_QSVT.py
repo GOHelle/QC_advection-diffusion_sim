@@ -4,53 +4,37 @@ from numpy.polynomial.chebyshev import Chebyshev, chebmul
 from scipy.special import jv, jve
 from scipy.optimize import fsolve
 import matplotlib.pyplot as plt
-from typing import Callable
+from typing import Callable, Tuple
 
 """ 
-This module provides tools for generating angle sequences for 
-approximating functions such as exp(iMx), exp(-Mx²), and exp(-Mx² + iMx) using 
-Chebyshev polynomial expansions
+This module provides utilities for generating QSP angle sequences for Chebyshev-based approximations of exp(iMx), exp(-Mx²), and exp(-Mx²+iMx)
 
-The module contains functions Angles_symQSP, JA_exp, JA_exp_Angles, JA_2exp, JA_2exp_Angles, err_deg, min_R, comb_exp, and comb_exp_Angles.
-
-Angles_symQSP uses the pyqsp implementation of qsp_sym to find an optimal angle sequence for a
-given Chebyshev coefficient sequence. 
-
-JA_exp gives the Jacobi-Anger expansion for exp(iMx)
-
-JA_exp_Angles generates angles for exp(iMx) using JA_exp
-
-JA_2exp gives the Jacobi-Anger expansion for exp(-Mx²)
-
-JA_2exp_Angles generates angles for exp(-Mx²) using JA_2exp
-
-err_deg exp(-Mx²) plots max error vs. degree for approximation
-
-min_R determines the minimum required expansion degree for a given error tolerance
-
-comb_exp computes Chebyshev coefficients for exp(-Mx² + iMx)
-
-comb_exp_angles generates angles for exp(-Mx² + iMx) using comb_exp
-
-"""  
+Functions:
+- symmetric_qsp_angles: Uses the pyqsp implementation of qsp_sym to find an optimal angle sequence for a
+                        given Chebyshev coefficient sequence.
+- jacobi_anger_exp, jacobi_anger_exp_angles: Jacobi-Anger expansion and angle generation for exp(iMx)
+- jacobi_anger_squared_exp, jacobi_anger_squared_exp_angles: Jacobi-Anger expansion and angle generation for exp(-Mx²)
+- plot_max_error, min_expansion_degree: Error plotting and minimum degree determination for approximations
+- combined_exp, combined_exp_angles: Chebyshev coefficients and angle generation for exp(-Mx² + iMx)
+"""
     
-def Angles_symQSP(coef: np.array, resp_plot: bool=False, targ_f: Callable=None, QSVT_format: bool=True) -> np.array:
-    """ Return the angle sequence for a given Chebyshev coefficient sequence using the pyqsp implementation of qsp_sym.
+def symmetric_qsp_angles(cheb_coeffs: np.array, plot_response: bool = False, target_function: Callable | None = None, qsvt_format: bool = True) -> np.array:
+    """ Compute symmetric QSP angle sequence for a given Chebyshev coefficient array.
 
     Args:
-        coef: Array of Chebyshev coefficients representing the target polynomial
-        resp_plot: If True and a target function is provided, the function plots the QSP response against the target.
-        targ_f: The target function approximated by the Chebyshecv coefficients. Used for plotting comparison.
-        QSVT_format: If True, convert the angle sequence into QSVT-compatible format.
+        cheb_coeffs: Array of Chebyshev coefficients representing the target polynomial
+        plot_response: If True and a target_function is provided, the function plots the QSP response against the target.
+        target_function: Target function to compare response.
+        qsvt_format: If True, convert angles to QSVT-compatible format.
                      If False, return the raw phase sequence from the solver.
 
     Returns:
-        Phi: Array of rotation angles (phases) for use in a quantum circuit.
+        Array of Phase angles for use in a quantum circuit.
     """
 
     # Compute symmetric QSP phase sequence using pyqsp's solver
-    (phiset, red_phiset, parity) = angle_sequence.QuantumSignalProcessingPhases(
-        poly=coef,
+    phiset, _, _ = angle_sequence.QuantumSignalProcessingPhases(
+        poly=cheb_coeffs,
         eps=1e-6,
         suc=1 - 1e-6,
         signal_operator="Wx",
@@ -61,10 +45,10 @@ def Angles_symQSP(coef: np.array, resp_plot: bool=False, targ_f: Callable=None, 
     )
 
     # Plot the angle response against the target function if requested
-    if resp_plot and targ_f:
+    if plot_response and target_function is not None:
         response.PlotQSPResponse(
             phiset,
-            target=targ_f,
+            target=target_function,
             signal_operator="Wx",
             measurement="z",
             sym_qsp=True,
@@ -73,136 +57,124 @@ def Angles_symQSP(coef: np.array, resp_plot: bool=False, targ_f: Callable=None, 
         )
     
     # Transform the phase sequence into QSVT-compatible format if requested.
-    if QSVT_format:
-        n = len(phiset)-1
-        Phi = np.zeros(n)
-        Phi[1:n] = phiset[1:n]-np.pi/2
-        Phi[0] = phiset[0]+phiset[-1]+((n-2)%4)*np.pi/2
+    if not qsvt_format:
+        return phiset
+    else:
+        n = len(phiset) - 1
+        qsvt_angles = np.zeros(n)
+        qsvt_angles[1:n] = phiset[1:n] - np.pi / 2
+        qsvt_angles[0] = phiset[0] + phiset[-1] + ((n - 2) % 4) * np.pi / 2
         # In the ususal QSP to QSVT one adds (n-1) pi/2. Here (n-2) is needed. 
         # In the symmetric qsp protocol the target polynomial is encoded as Im P wrt. the standard pair (P,Q)
         # where the symmetry forces Q = Q* to be real. In my previous work the target function is Re P instead
-        # and in that case one uses n-1 instead. 
-    else: 
-        Phi = phiset 
-    return Phi
+        # and in that case one uses n-1 instead.
+        return qsvt_angles
 
-def JA_exp(M: float, deg: int):
-    """
-    Computes Chebyshev coefficients of exp(i*M*x) using the Jacobi-Anger expansion.
+
+def jacobi_anger_exp(frequency: float, degree: int) -> np.ndarray:
+    """Compute Chebyshev coefficients of exp(i * frequency * x) using the Jacobi-Anger expansion.
 
     Args:
-        M : Parameter in exp(i M x).
+        frequency : Parameter in exp(i * frequency * x).
         deg: Degree of the Chebyshev expansion.
 
     Returns:
-        coef: Array of Chebyshev coefficients.
+        Array of Chebyshev coefficients.
     """
 
-    coef = np.zeros(deg + 1, dtype=complex)
-    for n in range(deg + 1):
-        coef[n] = 2 * (1j)**n * jv(n, M)
-    coef[0] /= 2  # correct the first term since J_0 is not doubled
-    return coef
+    cheb_coeffs = np.zeros(degree + 1, dtype=complex)
+    for d in range(degree + 1):
+        cheb_coeffs[d] = 2 * (1j ** d) * jv(d, frequency)
+    cheb_coeffs[0] /= 2  # correct the first term since J_0 is not doubled
+    return cheb_coeffs
 
-def JA_exp_Angles(M: float, scale: float, eps: float = 1e-6):
-    """
-    Computes QSP angle sequences for the real and imaginary parts of exp(i*M*x)
+def jacobi_anger_exp_angles(frequency: float, scale: float, tolerance: float = 1e-6) -> Tuple[np.ndarray, np.ndarray]:
+    """Generate QSP angle sequences for the real and imaginary parts of exp(i * frequency * x)
 
     Args:
-        M: Parameter in the exponential.
+        frequency: Parameter in the exponential.
         scale: Scaling factor applied to the coefficients.
         eps: Desired max approximation error.
 
     Returns:
-        (Phi_even, Phi_odd): QSP angles for real and imaginary components.
+        Tuple of QSP angles for real and imaginary components.
     """
-    deg = 2 * min_R(eps, M, func_type='exp') + 1
+    degree = 2 * min_expansion_degree(tolerance, frequency, func_type="exp") + 1
     
-    if deg % 2 == 0:
-        deg += 1  # ensure odd degree
+    if degree % 2 == 0:
+        degree += 1  # ensure odd degree
     
-    coef = scale * JA_exp(M, deg)
-    Phi_even = Angles_symQSP(np.real(coef))
-    Phi_odd = Angles_symQSP(np.imag(coef))
+    cheb_coeffs = scale * jacobi_anger_exp(frequency, degree)
     
-    return Phi_even, Phi_odd
+    return (symmetric_qsp_angles(np.real(cheb_coeffs)), symmetric_qsp_angles(np.imag(cheb_coeffs)))
 
-def JA_2exp(M:float,deg):
+
+def jacobi_anger_squared_exp(frequency: float, degree: int) -> np.ndarray:
     """
-    Computes Chebyshev coefficients of exp(-M*x²) via the Jacobi-Anger expansion.
+    Compute Chebyshev coefficients for exp(-frequency * x²) via the Jacobi-Anger expansion.
 
     Args:
-        M: Parameter in exp(-M*x²).
-        deg: Degree of the Chebyshev expansion.
+        frequency: Parameter in exp(-frequency * x²).
+        degree: Degree of the Chebyshev expansion.
 
     Returns:
-        coef: Array of Chebyshev coefficients.
+        Array of Chebyshev coefficients.
     """
-    coef = np.zeros(deg +1)
-    z = 1j*M/2
-    coef[0] = jve(0,z).real
-    for n in range(2,deg+1,2):
-        c = 2*1j**(n/2)*jve(int(n/2),z)
-        coef[n] = c.real
-    return coef 
+    cheb_coeffs = np.zeros(degree + 1)
+    z = 1j * frequency / 2
+    cheb_coeffs[0] = jve(0, z).real
+    for n in range(2, degree + 1, 2):
+        cheb_coeffs[n] = (2 * 1j ** (n / 2) * jve(int(n / 2),z)).real
+    return cheb_coeffs 
 
-def JA_2exp_Angles(M: float, scale: float = 1.0, eps: float = 1e-6):
-    """
-    Computes QSP angle sequence for exp(-M*x²) with minimal degree to meet eps.
+def jacobi_anger_squared_exp_angles(frequency: float, scale: float = 1.0, tolerance: float = 1e-6) -> np.ndarray:
+    """Generate QSP angles for exp(-frequency * x²) with minimal degree to meet the tolerance.
 
     Args:
-        M: Parameter in the exponential.
+        frequency: Parameter in the exponential.
         scale: Scaling factor for the coefficients.
-        eps: Desired max approximation error.
+        tolerance: Desired max approximation error.
 
     Returns:
-        Array of QSP angles for approximating exp(-M*x²).
+        Array of QSP angles for approximating exp(-frequency * x²).
     """
-    deg = 2 * min_R(eps, M, func_type='2exp') + 1  # ensure odd degree
+    degree = 2 * min_expansion_degree(tolerance, frequency, func_type='squared_exp') + 1 
     
-    if deg % 2 == 0:
-        deg += 1
+    if degree % 2 == 0: # ensure odd degree
+        degree += 1
     
-    coef = scale * JA_2exp(M, deg)
-    Phi_even = Angles_symQSP(coef)
-    
-    return Phi_even
+    return symmetric_qsp_angles(scale * jacobi_anger_squared_exp(frequency, degree))
 
-def err_deg(M: int, R: tuple, func_type='exp'):
-    """
-    Plots the maximum error of Chebyshev polynomial approximations over a range of degrees.
+
+def plot_max_error(frequency: int, degree_range: tuple[int, int, int], func_type: str = 'exp') -> None:
+    """Plot maximum error of Chebyshev polynomial approximations over a range of degrees.
 
     Args:
-        M: Parameter in the exponential.
-        R: A tuple (start, stop, step) for degrees to evaluate.
-        func_type: Type of function to approximate; either 'exp' (for exp(i*M*x)) or '2exp' (for exp(-M*x²)).
-
-    Returns:
-        None: Displays a plot of max error vs. degree.
+        frequency: Parameter in the exponential.
+        degree_range: A tuple (start, stop, step) for degrees to evaluate.
+        func_type: Type of function to approximate; either 'exp' (for exp(i * frequency * x)) or 'squared_exp' (for exp(-M*x²)).
     """
-    start, stop, step = R
-    x = np.linspace(-1, 1, 1000)
+    start, stop, step = degree_range
+    x_vals = np.linspace(-1, 1, 1000)
     
     if func_type == 'exp':
-        f = lambda x: np.exp(1j* M * x)
-        coef_fn = JA_exp
-        title = f"exp(iMx, M = {M}"
+        target_fn = lambda x: np.exp(1j * frequency * x)
+        coeff_fn = jacobi_anger_exp
+        title = f"exp(iMx, M = {frequency}"
     else:
-        f = lambda x: np.exp(-M*x**2)
-        coef_fn = JA_2exp
-        title = f"exp(-Mx²), M = {M}"
+        target_fn = lambda x: np.exp(-frequency * x ** 2)
+        coeff_fn = jacobi_anger_squared_exp
+        title = f"exp(-Mx²), M = {frequency}"
     
-    degrees = range(start, stop, step)
     errors = []
-    for deg in degrees:
-        coef = coef_fn(M, deg)
-        P = Chebyshev(coef, domain=[-1, 1])
-        err = np.max(np.abs(f(x) - P(x)))
-        errors.append(err)
+    for degree in range(start, stop, step):
+        cheb_coeffs = coeff_fn(frequency, degree)
+        poly = Chebyshev(cheb_coeffs, domain=[-1, 1])
+        errors.append(np.max(np.abs(target_fn(x_vals) - poly(x_vals))))
     
     # Plotting
     plt.figure()
-    plt.plot(degrees, errors, marker='o')
+    plt.plot(range(start, stop, step), errors, marker='o')
     plt.yscale('log')
     plt.xlabel('Degree')
     plt.ylabel('Max Error')
@@ -212,99 +184,85 @@ def err_deg(M: int, R: tuple, func_type='exp'):
     plt.show()
 
 # test
-#for M in [5, 10, 20]:
-#    err_deg(M, R=(10, 75, 5), func_type='exp')
-#    err_deg(M, R=(10, 75, 5), func_type='2exp')
+#for frequency in [5, 10, 20]:
+#    err_deg(frequency, R=(10, 75, 5), func_type='exp')
+#    err_deg(frequency, R=(10, 75, 5), func_type='squared_exp')
 
-def min_R(eps:float, M:float, func_type:str='exp'):
-    """
-    Estimates the minimum expansion degree required to approximate a function within given error tolerance.
+def min_expansion_degree(tolerance: float, frequency: float, func_type: str = 'exp') -> int:
+    """Estimate minimal expansion degree for a given approximation tolerance.
 
     Args:
-        eps: Target approximation error.
-        M: Parameter in the exponential.
-        func_type: Either 'exp' or '2exp', determining which function to approximate.
+        tolerance: Target approximation error.
+        frequency: Parameter in the exponential.
+        func_type: Either 'exp' or 'squared_exp', determining which function to approximate.
 
     Returns:
         Minimum value of R such that the Chebyshev approximation error is ≤ eps.
     """
-    def r(eps,M):
-        r_val = fsolve(lambda r: (M/r)**r - eps,M)[0]
-        return r_val
-    R_init = int(np.floor(r(3/2*eps, np.e*abs(M)/4)))
+
+    def solve_r(eps, frequency):
+        return fsolve(lambda r: (frequency / r) ** r - eps, frequency)[0]
+    initial_degree = int(np.floor(solve_r(1.5 * tolerance, np.e * abs(frequency) / 4)))
 
     x_vals = np.linspace(-1, 1, 1000)
-    if func_type == 'exp':
-        f_vals = np.exp(1j*M*x_vals)
-    else:
-        f_vals = np.exp(-M*(x_vals)**2)
+    f_vals = np.exp(1j * frequency * x_vals) if func_type == 'exp' else np.exp(-frequency * x_vals ** 2)
 
-    for R in range(R_init, 0, -1):
-        if func_type == 'exp':
-            coeffs = JA_exp(M, 2*R+1)
-        else:
-            coeffs = JA_2exp(M, 2*R+1)
-        approx = np.polynomial.chebyshev.chebval(x_vals, coeffs)
-        max_error = np.max(np.abs(f_vals - approx))
-        if max_error > eps or (R == R_init and max_error <= eps):
+    for R in range(initial_degree, 0, -1):
+        cheb_coeffs = jacobi_anger_exp(frequency, 2 * R + 1) if func_type == 'exp' else jacobi_anger_squared_exp(frequency, 2 * R + 1)
+        approx_vals = np.polynomial.chebyshev.chebval(x_vals, cheb_coeffs)
+        max_error = np.max(np.abs(f_vals - approx_vals))
+        if max_error > tolerance or (R == initial_degree and max_error <= tolerance):
             return R+1      
-
-def comb_exp(eps:float, M1:float, M2:float):
-    """
-    Computes Chebyshev coefficients of the function exp(-M1*x² + i*M2*x)
-    such that the max approximation error is within eps.
+      
+        
+def combined_exp(tolerance: float, frequency1: float, frequency2:float):
+    """Compute Chebyshev coefficients for exp(-frequency1 * x² + i * frequency2 * x) with minimal degree to meet the tolerance.
 
     Args:
-        eps: Desired approximation error.
-        M1: First parameter in the exponential.
-        M2: Second parameter in the exponential.
+        tolerance: Desired approximation error.
+        frequency1: First parameter in the exponential.
+        frequency2: Second parameter in the exponential.
 
     Returns:
         Array of Chebyshev coefficients of the approximated function.
     """
+    R_f = min_expansion_degree(tolerance / 2, frequency1, func_type="2exp")
+    coeffs_f = jacobi_anger_squared_exp(frequency1, 2 * R_f + 1)
 
-    R_f = min_R(eps/2, M1, func_type="2exp")
-    coeffs_f = JA_2exp(M1,2*R_f+1)
-
-    R_g = min_R(eps/2, M2, func_type="exp")
-    coeffs_g = JA_exp(M2,2*R_g+1)
+    R_g = min_expansion_degree(tolerance / 2, frequency2, func_type="exp")
+    coeffs_g = jacobi_anger_exp(frequency2, 2 * R_g + 1)
 
     coeffs = chebmul(coeffs_f, coeffs_g)
 
     x_vals = np.linspace(-1, 1, 1000)
-    f_vals = np.exp(-M1*x_vals**2 + 1j*M2*x_vals)
+    f_vals = np.exp(-frequency1 * x_vals ** 2 + 1j * frequency2 * x_vals)
 
     for i in range(len(coeffs), 0, -1):
         approx = np.polynomial.chebyshev.chebval(x_vals, coeffs[:i])
         max_error = np.max(np.abs(f_vals - approx))
-        if max_error > eps:
-            if (i+1) % 2 == 0:    # Ensure odd number of coefficients
-                return coeffs[:i+1]
+        if max_error > tolerance:
+            if (i + 1) % 2 == 0:    # Ensure odd number of coefficients
+                return coeffs[:i + 1]
             else:
-                return coeffs[:i+2]
+                return coeffs[:i + 2]
 
-def comb_exp_Angles(eps:float, M1:float, M2:float):
-    """
-    Computes QSP angles for the function exp(-M1 x² + i M2 x).
+def combined_exp_angles(tolerance: float, frequency1: float, frequency2: float) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute QSP angles for exp(-frequency1 * x² + i * frequency2 * x).
 
     Args:
-        eps: Target Approximation error.
-        M1: First parameter in the exponential.
-        M2: Second parameter in the exponential.
+        tolerance: Target Approximation error.
+        frequency1: First parameter in the exponential.
+        frequency2: Second parameter in the exponential.
 
     Returns:
-        tuple: (Phi_even, Phi_odd) where:
-            - Phi_even: Angle sequence for the real part.
-            - Phi_odd: Angle sequence for the imaginary part.
+        Tuple containing angle sequences for real and imaginary parts:
     """
 
-    coef = comb_exp(eps, M1, M2)
-    coef_real = np.real(coef)
-    coef_imag = np.imag(coef)
-    coef_even = [val if i % 2 == 0 else 0 for i, val in enumerate(coef_real)]
-    coef_odd  = [val if i % 2 != 0 else 0 for i, val in enumerate(coef_imag)]
-    Phi_even = Angles_symQSP(coef_even)
-    Phi_odd = Angles_symQSP(coef_odd)
+    combined_coeffs = combined_exp(tolerance, frequency1, frequency2)
+    even_coeffs = [val if i % 2 == 0 else 0 for i, val in enumerate(np.real(combined_coeffs))]
+    odd_coeffs = [val if i % 2 == 1 else 0 for i, val in enumerate(np.imag(combined_coeffs))]
 
-    return Phi_even, Phi_odd 
+    return symmetric_qsp_angles(even_coeffs), symmetric_qsp_angles(odd_coeffs) 
+
+
 
