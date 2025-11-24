@@ -5,236 +5,253 @@ from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
 from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
 from tabulate import tabulate
+from typing import Callable
 from Adv_Diff import Adv_Diff_QC
-from Adv_Diff.Angles_QSVT import JA_exp_Angles, JA_2exp_Angles, comb_exp_Angles
-from Adv_Diff.Fourier import Fourier_coef, Fourier_approx
+from Adv_Diff.Angles_QSVT import jacobi_anger_exp_angles, jacobi_anger_squared_exp_angles, combined_exp_angles
+from Adv_Diff.Fourier import fourier_coefficients, fourier_approximation
 
 """
-This module provides a quantum simulation method to approximate the solution of the advection-diffusion equation.
+This module provides a quantum simulation method to approximate the solution of the advection-diffusion PDE.
 
-Method `Sim` utilizes QSVT methods defined in `Adv_Diff_QC.py` to simulate the evolution of an initial condition 
-under the advection-diffusion PDE. It compares the quantum-based solution to a classical Fourier-based approximation 
-defined in `Fourier.py`.
+Method 'simulate_adv_diff' utilizes QSVT methods defined in 'Adv_Diff_QC.py' to simulate the evolution of an initial condition 
+under the advection-diffusion PDE. It compares the quantum results (statevector and/or measurement)  with a classical Fourier
+approximation, optionally prints circuit complexity, and plots results.
 """
 
-def Sim(n: int, T: np.array, c: float, nu: float, d:float=4, init_f = lambda x: np.exp(-10*(x-4/3)**2), shots:int=10**6, 
-        Complexity:bool=True, order:int = 2, eps=10**(-8), sim_type: str="both", exact_sol:bool = True, plot:bool=True):
-    """ Quantum simulation of the advection-diffusion equation via QSVT and comparison to classical Fourier approximation.
+def simulate_adv_diff(
+    num_qubits: int, 
+    times: np.array, 
+    adv_speed: float, 
+    diff_coeff: float, 
+    domain_length: float = 4.0, 
+    init_f: Callable = lambda x: np.exp(-10 * (x - 4 / 3) ** 2), 
+    shots: int = 10 ** 6, 
+    report_complexity: bool = True, 
+    order: int = 2, 
+    tolerance: float = 1e-8, 
+    sim_type: str = "both", 
+    compute_exact: bool = True, 
+    plot: bool = True
+    ):
 
-    This function constructs and runs quantum circuits simulating the evolution of an initial function under
-    the advection-diffusion PDE. It supports pure diffusion, pure advection, and combined advection-diffusion evolution, and method orders 2, 4 and 6.
-    The output is compared to a classical Fourier-based approximation, and both results are plotted for visual inspection.
+    """ Quantum simulation of the advection-diffusion equation via QSVT, with classical comparison.
+
+    This function supports pure diffusion, pure advection, and combined advection-diffusion evolution, and method orders 2, 4, 6 and 14.
+    The simulation therefore selects the required number of ancilla qubits based on the simulation type and QSVT order. 
+    Postselection on ancillary measurements is performed to extract the quantum output.
+    The output is compared to a classical Fourier-based approximation, and results are plotted for visual inspection. 
+    relevant results, such as success rate, max error and circuit complexity, are printed and summarized in a table.
 
     Args:
-        n: Number of qubits to discretize the spatial domain (2^n grid points).
-        T: Array of final times at which the solution is evaluated. Each entry in T triggers a separate simulation run. 
-            Could also be of type int or float.
-        c: Advection speed parameter.
-        nu: Diffusion coefficient.
-        d: Length of the spatial domain.
+        num_qubits: Number of qubits to discretize the spatial domain (2^num_qubits grid points).
+        times: Array (or scalar) of final times at which the solution is evaluated. Each entry in times triggers a separate simulation run. 
+        adv_speed: Advection speed parameter.
+        diff_coeff: Diffusion coefficient.
+        domain_length: Length of the spatial domain.
         init_f: Initial condition function f(x). Default is a Gaussian centered at 4/3.
-        shots: Number of measurement shots for the quantum simulation.
-        Complexity: If True, prints number of 1-qubit gates, number of 2-qubit gates, total number of gates, and circuit depth after transpiling.
-        order: Order of the method. Supported values are 2, 4, 6 and 14.
-        eps: Tolerance parameter used for angle calculations.
-             sim_type: If sim_type="sv", statevector simulation is performed, if sim_type="meas", measurement is performed, and if sim_type="both", both simulations are performed.
-        exact_sol: If True, computes the classical Fourier solution for comparison.
-        plot: If True, plots the initial condition and the quantum and Fourier solutions for each value in T.
-
-    Outputs:
-        - A matplotlib figure with subplots for the initial condition and a comparison plot (quantum vs Fourier) for each final time value in T if plot = True.
-        - gate counts and transpiled circuit depth if `Complexity=True`.
-        - success rate of the postselection if measurement is performed.
-        - Max error value(s) if exact_sol = True.
-        - A table summarizing all the printed outputs for each value in T.
+        shots: Number of measurement shots (if measurement simulation requested).
+        report_complexity: If True, prints gate counts and depth after transpiling.
+        order: Method order (2, 4, 6 or 14).
+        tolerance: Tolerance parameter used for angle calculations.
+        sim_type: One of "sv" (statevector simulation only), "meas" (measurement only), or "both".
+        compute_exact: If True, compute the classical Fourier solution for comparison.
+        plot: If True, plots the initial condition and the solutions for each value in times.
 
     Returns:
-        x: The space discretization
-        f_Scaled(x): The scaled inital function on the discretized space
-        z_list: a list of quantum solutions from measurement for each value in T. Note this is only non-empty if plot = "meas" or "both".
-        w_list: a list of Fourier solutions for each value in T. 
-        W_list: a list of quantum solutions from statevector simulation for each value in T. Note this is only non-empty if plot = "sv" or "both".
-        max_err_list: a list of max errors for each value in T. Each element is a list containing the max error found from the measurement outcomes, 
-                      and/or the statevector simulation, dependent on plot. Note this is only non-empty if exact_sol = True.
-        complexity_list: a list of lists containing the number of 1-qubit gates, number of 2-qubit gates, total number of gates, and circuit depth 
-                         after transpiling for each value in T. Note this is only non-empty if Complexity=True.
-
-    Notes:
-        - If c=0, only advection is performed. If nu = 0 only diffusion is performed and if neither are 0, the QSVT for combined advection-diffusion is applied. 
-          The simulation therefore selects the required number of ancilla qubits based on the simulation type and QSVT order. 
-        - Postselection on ancillary measurements is performed to extract the quantum output.
+        A tuple containing: 
+        - The space discretization
+        - The initial function values on the discretized space
+        - A list of quantum measurement-based solutions for each value in 'times'. Only non-empty if sim_type != "sv".
+        - A list of Fourier solutions for each value in 'times'. Only non-empty if compute_exact = True. 
+        - A list of quantum statevector solutions for each value in 'times'. Only non-empty if sim_type != "meas".
+        - A list of max-error entries for each value in 'times'. Each entry contains max errors from measurement and/or statevector simulation.
+          Only non-empty if exact_sol = True.
+        - A list of postselection success rates for each value in 'times'.
+        - A list of complexity entries for each in value in 'times'. Each entry contains the number of 1-qubit gates, number of cnot-gates, 
+          total number of gates, and circuit depth. Only non-empty if Complexity=True.
     """
 
     # exceptions and input formatting
-    T = np.atleast_1d(T)  # Ensure array
-    T = T[T != 0]  # Remove any zero entries
-    if c == 0 and nu == 0: sys.exit("Error: c and nu cannot both be 0")
-    if order not in [2,4,6,14]: sys.exit("Error: The order should be either 2, 4, 6 or 14")
-    if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: plot should be either sv', 'meas' or 'both'")
+    times = np.atleast_1d(times)  # ensure array
+    times = times[times != 0]  # remove zero entries (if any)
 
-    # Identify which PDE evolution type applies
-    method = "pure_diff" if c==0 else "pure_adv" if nu==0 else "adv_diff"
+    if adv_speed == 0 and diff_coeff == 0: sys.exit("Error: adv_speed and diff_coeff cannot both be 0")
+    if order not in [2, 4, 6, 14]: sys.exit("Error: The order must be either 2, 4, 6 or 14")
+    if sim_type not in ["sv", "meas", "both"]: sys.exit("Error: sim_type must be either sv', 'meas' or 'both'")
+
+    # Determine PDE evolution type
+    method = "pure_diff" if adv_speed == 0 else "pure_adv" if diff_coeff == 0 else "adv_diff"
+
+    # Prepare containers for results
+    meas_results, fourier_results, statevec_results = [], [], []
+    num_qubits_totals, max_errors, success_rates, complexities = [], [], [], []
 
     # Choose number of ancilla qubits based on method and order
-    anc = 4 if order ==2 else 6 if order == 14 else 5 
-    if method =="pure_diff": anc = anc-1
+    num_anc = 4 if order == 2 else 6 if order == 14 else 5 
+    if method == "pure_diff": num_anc -= 1
+    num_qubits_total = num_qubits + num_anc
+    num_qubits_totals = [num_qubits_total] * len(times)
 
-    # Computing time-evolution parameter M
-    dx = d/(2**n)
-    dt_factors = {2: 1, 4: 3/2, 6: 11/6, 14: 363/140}
-    M_adv = c * T * dt_factors[order] / dx
-    M_diff = nu * T * dt_factors[order]**2 / (dx**2)
+    # Spatial discretization and time-evolution parameters
+    dx = domain_length / (2 ** num_qubits)
+    dt_factors = {2: 1, 4: 3 / 2, 6: 11 / 6, 14: 363 / 140}
+    M_adv = adv_speed * times * dt_factors[order] / dx
+    M_diff = diff_coeff * times * dt_factors[order] ** 2 / (dx ** 2)
 
-    # scaling
+    # scaling factors
     adv_scale = 0.95
     diff_scale = 0.95
 
-    # Spatial grid
-    x = np.linspace(0,d,2**n,endpoint=False)
-    y = init_f(x)
-    if not np.all(y >= 0): sys.exit("Error: initial function not positive")
-    norm_y = np.linalg.norm(y)
-    y /= norm_y
+    # Spatial grid and normalized initial state
+    x = np.linspace(0, domain_length, 2 ** num_qubits, endpoint=False)
+    init_values = init_f(x)
+    if not np.all(init_values >= 0): sys.exit("Error: initial function must be non-negative on the domain")
+    norm_init = np.linalg.norm(init_values)
+    init_normalized = init_values / norm_init
 
     # Classical Fourier solution function
-    if exact_sol:
-        g = Fourier_approx(*Fourier_coef(init_f,1e-6,d),d)
+    if compute_exact:
+        fourier_func = fourier_approximation(*fourier_coefficients(init_f, 1e-6, domain_length), domain_length)
 
-    # For storing solution values to return
-    z_list, w_list, W_list, max_err_list, success_rate_list, complexity_list = [], [], [], [], [], []
-
-    # Preparing plot
+    # Plot setup
     if plot:
-        num_plots = len(T) + 1
-        plt.figure(figsize=(10, 9))
+        num_plots = len(times) + 1
+        plt.figure(figsize=(12, 9))
 
-    for i in range(len(T)):
-        print(f"--- RESULTS FOR T = {T[i]}, ORDER = {order} ---\n")
+    for i in range(len(times)):
+        print(f"--- RESULTS FOR ORDER {order} AT TIME {times[i]} ---\n")    
 
-        qr_anc, cr_anc = QuantumRegister(anc), ClassicalRegister(anc)
-        qr, cr = QuantumRegister(n), ClassicalRegister(n)
+        # Construct registers and circuit
+        qr_anc, cr_anc = QuantumRegister(num_anc), ClassicalRegister(num_anc)
+        qr, cr = QuantumRegister(num_qubits), ClassicalRegister(num_qubits)
         qc = QuantumCircuit(qr_anc, qr, cr_anc, cr)
 
         # State preparation 
-        qc.prepare_state(Statevector(y),qr)
+        qc.prepare_state(Statevector(init_normalized), qr)
 
-        # Generate phase angles for QSVT evolution
+        # Generate and append QSVT angle sequences for QSVT evolution
         print(f"-- ANGLE SEQUENCES --")
-        if method == "pure_adv": # We only have to apply the advection QSVT
-            Phi_cos, Phi_sin = JA_exp_Angles(M_adv[i], adv_scale, eps)
-            qc.append(Adv_Diff_QC.QSVT(n, Phi_cos, Phi_sin, method, order), qr_anc[:] + qr[:])
-        elif method == "pure_diff":  # We only have to apply the diffusion QSVT
-            Phi_even = JA_2exp_Angles(M_diff[i], diff_scale, eps)
-            qc.append(Adv_Diff_QC.QSVT_single(n, Phi_even, order), qr_anc[:] + qr[:])
+        if method == "pure_adv": 
+            angle_seq_cos, angle_seq_sin = jacobi_anger_exp_angles(M_adv[i], adv_scale, tolerance)
+            qc.append(Adv_Diff_QC.qsvt(num_qubits, angle_seq_cos, angle_seq_sin, method, order), qr_anc[:] + qr[:])
+        elif method == "pure_diff": 
+            angle_seq_even = jacobi_anger_squared_exp_angles(M_diff[i], diff_scale, tolerance)
+            qc.append(Adv_Diff_QC.qsvt_single(num_qubits, angle_seq_even, order), qr_anc[:] + qr[:])
         else:
-            Phi_even, Phi_odd = comb_exp_Angles(eps, M_diff[i], M_adv[i])
-            qc.append(Adv_Diff_QC.QSVT(n, Phi_odd, Phi_even, method, order), qr_anc[:] + qr[:])
+            angle_seq_even, angle_seq_odd = combined_exp_angles(tolerance, M_diff[i], M_adv[i])
+            qc.append(Adv_Diff_QC.qsvt(num_qubits, angle_seq_odd, angle_seq_even, method, order), qr_anc[:] + qr[:])
 
         # Fourier approximation
-        if exact_sol:
-            w = g(x,T[i],c,nu)
-            w_list.append(w)
+        if compute_exact:
+            fourier_result = fourier_func(x, times[i], adv_speed, diff_coeff)
+            fourier_results.append(fourier_result)
 
-        # State vector simulation
+        # Statevector simulation
         if sim_type != "meas":
             sv = Statevector.from_instruction(qc)
-            W = np.asarray(sv.data).reshape(2**n, 2**anc)[:,0]
+            statevec_result = np.asarray(sv.data).reshape(2 ** num_qubits, 2 ** num_anc)[:, 0]
             if sim_type != "both":
-                success_rate = np.linalg.norm(W)**2
-                success_rate_list.append(success_rate)
-            W *= 2*norm_y/(0.95 if method=="pure_adv" else 2*0.95 if method=="pure_diff" else 1)    
-            W_list.append(W)
+                success_rate_sv = np.linalg.norm(statevec_result) ** 2
+                success_rates.append(success_rate_sv)
+            statevec_result *= 2 * norm_init/(adv_scale if method == "pure_adv" else 2 * diff_scale if method == "pure_diff" else 1)    
+            statevec_results.append(statevec_result)
 
         # Measurement simulation
         if sim_type != "sv":
-            qc.measure(qr_anc,cr_anc)
-            qc.measure(qr,cr)
+            qc.measure(qr_anc, cr_anc)
+            qc.measure(qr, cr)
             sim = AerSimulator()
-            qc_comp = transpile(qc,sim)
-            res = sim.run(qc_comp,shots = shots).result()
+            qc_comp = transpile(qc, sim)
+            res = sim.run(qc_comp, shots = shots).result()
             counts = res.get_counts(0)
 
             # Postselection
-            total = 0        
-            z = np.zeros(2**n)
-            select = '0'*anc
+            total_selected = 0        
+            meas_result = np.zeros(2 ** num_qubits)
+            select_str = "0" * num_anc
             for key in counts:
-                L = key.split()
-                if L[1] == select:
-                    z[int(L[0],2)] = np.sqrt(counts[key]/shots)*2
-                    z[int(L[0],2)] *= norm_y / (adv_scale if method=="pure_adv" else 2*diff_scale if method=="pure_diff" else 1)  # Reverse scaling factors
-                    total += counts[key] 
-            z_list.append(z)
-            success_rate = total/shots
-            success_rate_list.append(success_rate)
-            print(f"\n-- SUCCESS RATE -- \n succes rate of postselection: {success_rate}\n ")
+                parts = key.split()
+                if parts[1] == select_str:
+                    idx = int(parts[0], 2)
+                    meas_result[idx] = np.sqrt(counts[key]/shots)*2
+                    meas_result[idx] *= norm_init / (adv_scale if method=="pure_adv" else 2 * diff_scale if method=="pure_diff" else 1)  # Reverse scaling factors
+                    total_selected += counts[key] 
+            meas_results.append(meas_result)
+            success_rate = total_selected / shots
+            success_rates.append(success_rate)
+            print(f"\n-- SUCCESS RATE -- \nsucces rate of postselection: {success_rate}\n ")
 
         # Printing gate counts and circuit depth
-        if Complexity:
+        if report_complexity:
             tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
-            gts = tqc.count_ops()                           # Including "cp" and "cry" improves lower order count
-            gate_1q = gts['u']
-            gate_2q = gts['cx']                             # +gts['cp']+gts['cry']
-            complexity_list.append([gate_1q, gate_2q, gate_1q+gate_2q, tqc.depth()])                   
-            print(f"-- COMPLEXITY-- \nTotal: {gate_1q+gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
+            gts = tqc.count_ops()                           
+            gate_1q = gts["u"]
+            gate_2q = gts["cx"]                             
+            complexities.append([gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()])                   
+            print(f"\n-- COMPLEXITY-- Total: {gate_1q + gate_2q}\nCircuit depth after transpiling:{tqc.depth()}")
 
         # Max error
-        if exact_sol:
+        if compute_exact:
             print("-- MAX ERROR --")
-            max_err = []
+            max_err_entry = []
             if sim_type != "sv":
-                max_err_meas = np.max(np.abs(z - w))
+                max_err_meas = np.max(np.abs(meas_result - fourier_result))
                 print(f"Max error from measurement: {max_err_meas}")
-                max_err.append(max_err_meas)
+                max_err_entry.append(max_err_meas)
             if sim_type != "meas":
-                max_err_sv = np.max(np.abs(W - w))
+                max_err_sv = np.max(np.abs(statevec_result - fourier_result))
                 print(f"Max error from statevector: {max_err_sv}\n")
-                max_err.append(max_err_sv)
-            max_err_list.append(max_err)
+                max_err_entry.append(max_err_sv)
+            max_errors.append(max_err_entry)
 
         # Plot
         if plot:
             if i == 0:
                 plt.subplot(num_plots, 1, 1)
-                plt.plot(x,init_f(x))  
-                y_min, y_max = 0, np.max(init_f(x))
-                plt.ylim(y_min-0.05, y_max+0.05)
-                plt.title(rf"Inital Condition")
-            plt.subplot(num_plots,1,i+2)
-            if sim_type != "sv": plt.plot(x, z, label="Quantum measurements")
-            if sim_type != "meas": plt.plot(x, W.real, label="Quantum statevector")
-            if exact_sol: plt.plot(x,w,label="Exact (fourier)")
-            plt.ylim(y_min-0.05,y_max+0.05)
-            plt.title(f"T={T[i]}")
+                plt.plot(x, init_f(x))  
+                y_min, y_max = np.min(init_f(x)), np.max(init_f(x))
+                plt.ylim(y_min - 0.05, y_max + 0.05)
+                plt.title("Initial Condition")
+            plt.subplot(num_plots, 1, i + 2)
+            if sim_type != "sv": plt.plot(x, meas_result, label="Quantum Measurements")
+            if sim_type != "meas": plt.plot(x, statevec_result.real, label="Quantum Statevector")
+            if compute_exact: plt.plot(x, fourier_result, label="Exact Solution (Fourier)")
+            plt.ylim(y_min - 0.05, y_max + 0.05)
+            plt.title(rf"Results at Final Time $T = {times[i]}$")
             plt.legend()
 
     if plot:
         # Table 
-        print(f"-- SUMMARY --")
-        table, headers = [], ["T"]
-        for i,t in enumerate(T):
+        print("-- SUMMARY --")
+        table, headers = [], ["time"]
+        for i, t in enumerate(times):
             row = [t]
-            if exact_sol: row.append(max_err_list[i][0])
-            if sim_type != "sv":
-                row.append(success_rate_list[i])
-                if Complexity: row.extend(complexity_list[i][0:2])
+            if compute_exact: row.append(max_errors[i][0])
+            row.append(success_rates[i])
+            if report_complexity: row.extend(complexities[i][0:2])
             table.append(row)
 
-        if exact_sol:
+        if compute_exact:
             if sim_type == "meas": headers += ["meas max error"]
             else: headers += ["sv max error"]
-        if sim_type != "sv":
-            headers += ["success rate"]
-            if Complexity: headers += ["1-qubit gates","2-qubit gates"]
+        headers += ["success rate"]
+        if sim_type != "sv" and report_complexity: headers += ["1-qubit gates", "2-qubit gates"]
 
-        print(tabulate(table,headers=headers,tablefmt="simple_grid"))
+        print(tabulate(table, headers=headers, tablefmt="simple_grid"))
 
         # Plot
-        if method == "pure_adv": title_str = rf"Pure Advection with Parameters; $n = {n},\ c = {c},\ order = {order}$"
-        elif method == "pure_diff": title_str = rf"Pure Diffusion with Parameters; $n = {n},\ \nu = {nu},\ order = {order}$"
-        else: title_str = rf"Advection-Diffusion with Parameters; $n = {n},\ \nu = {nu},\ c = {c},\ order = {order}$"
-        plt.suptitle(title_str,fontsize=15)
+        if method == "pure_adv": 
+            title_str = f"Advection Simulation of Order {order} with {num_qubits} Spatial Qubits\n" \
+                        rf"Advection Speeds is $c = {adv_speed}$"
+        elif method == "pure_diff": 
+            title_str = f"Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits\n" \
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff}$"
+        else: 
+            title_str = f"Advection-Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits\n" \
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff}$, and Advection Speed is $c = {adv_speed}$"
+        plt.suptitle(title_str, fontsize=15)
         plt.tight_layout()
         plt.show()
     
-    return x, init_f(x), z_list, w_list, W_list, max_err_list, success_rate_list, complexity_list
+    return x, init_f(x), meas_results, fourier_results, statevec_results, num_qubits_totals, max_errors, success_rates, complexities
+
