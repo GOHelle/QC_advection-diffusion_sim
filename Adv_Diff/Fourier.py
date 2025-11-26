@@ -187,12 +187,12 @@ def fourier_coefficients_2d(f: Callable, tolerance: float, domain_length: float,
 
     for N in range(1, max_iter + 1):
         new_modes = []
-        # horizontal strip
+        # vertical strip
         for n2 in range(-N, N + 1):
             if N == 0 and n2 <= 0:
                 continue
             new_modes.append((N, n2))
-        # vertical strip
+        # horizontal strips
         for n1 in range(0, N):
             for n2 in [-N, N]:
                 if n1 == 0 and n2 <= 0:
