@@ -111,7 +111,7 @@ def simulate_adv_diff(
 
     # Classical Fourier solution function
     if compute_exact:
-        fourier_func = fourier_approximation(*fourier_coefficients(init_f, 1e-6, domain_length), domain_length)
+        fourier_func = fourier_approximation(*fourier_coefficients(init_f, 1e-8, domain_length), domain_length)
 
     # Plot setup
     if plot:
@@ -148,8 +148,14 @@ def simulate_adv_diff(
 
         # Statevector simulation
         if sim_type != "meas":
-            sv = Statevector.from_instruction(qc)
-            statevec_result = np.asarray(sv.data).reshape(2 ** num_qubits, 2 ** num_anc)[:, 0]
+             # using Aer statevector simulator
+            simulator = AerSimulator(method='statevector')
+            qc_sv = qc.copy()
+            qc_sv.save_statevector()
+            qc_sv = transpile(qc_sv, simulator)
+            result = simulator.run(qc_sv).result()
+            sv_data = result.get_statevector(qc_sv)
+            statevec_result = np.asarray(sv_data).reshape(2 ** num_qubits, 2 ** num_anc)[:, 0]
             if sim_type != "both":
                 success_rate_sv = np.linalg.norm(statevec_result) ** 2
                 success_rates.append(success_rate_sv)
@@ -217,7 +223,7 @@ def simulate_adv_diff(
             if sim_type != "meas": plt.plot(x, statevec_result.real, label="Quantum Statevector")
             if compute_exact: plt.plot(x, fourier_result, label="Exact Solution (Fourier)")
             plt.ylim(y_min - 0.05, y_max + 0.05)
-            plt.title(rf"Results at Final Time $T = {times[i]}$")
+            plt.title(rf"Results at Time $T = {times[i]}$")
             plt.legend()
 
     if plot:

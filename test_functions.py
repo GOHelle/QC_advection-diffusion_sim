@@ -144,7 +144,7 @@ def plot_simulations(
         if sim_type != "meas":
             axes[1].plot(x_common, statevec_result_interp.real, '--', color=colors[i], lw=1, label=f'statevector, order {orders[i]} ({num_qubits[i]} spatial qubits) ')
 
-    axes[1].set_title(rf'Results at Final Time $T = {time}$', fontsize=14)
+    axes[1].set_title(rf'Results at Time $T = {time}$', fontsize=14)
     axes[1].legend()
 
     # Determine min/max y-values across both plots
@@ -267,7 +267,7 @@ def plot_simulations_2d(
 
     # Plot exact solution
     ax_exact.plot_surface(X, Y, results[0][4], cmap='viridis')
-    ax_exact.set_title(f'Exact Solution at Final Time $T = {time}$', fontsize=14)
+    ax_exact.set_title(f'Exact Solution at Time $T = {time}$', fontsize=14)
     ax_exact.set_zlim(z_min, z_max)
     ax_exact.set_xlabel('x')
     ax_exact.set_ylabel('y')
@@ -280,9 +280,9 @@ def plot_simulations_2d(
         Z = results[i][5].real if sim_type=="sv" else results[i][3]
         ax.plot_surface(X, Y, Z, cmap='plasma')
         if sim_type == "sv":
-            ax.set_title(rf'Statevector at Final Time $T = {time}$ (Order {orders[i]})', fontsize=14)
+            ax.set_title(rf'Statevector at Time $T = {time}$ (Order {orders[i]})', fontsize=14)
         else:
-            ax.set_title(rf'Measurements at Final Time $T = {time}$ (Order {orders[i]})', fontsize=14)
+            ax.set_title(rf'Measurements at Time $T = {time}$ (Order {orders[i]})', fontsize=14)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlim(z_min, z_max)
@@ -355,6 +355,6 @@ def run_examples(examples = [gaussian, sine_sum, wave_pack, bump, rec, gaussian_
                 plot_simulations_2d(num_qubits_order=[(6,2),(5,4)], time=0.5, adv_speed_x=1, adv_speed_y=1, diff_coef=0.1, init_f=sine_squared_2d, shots=shots, tolerance=1e-6, sim_type='meas')
             plot_simulations_2d(num_qubits_order=[(6,2),(5,4)], time=0.5, adv_speed_x=1, adv_speed_y=1, diff_coef=0.1, init_f=sine_squared_2d, shots=shots, tolerance=1e-6, sim_type=sim_type)
 
-run_examples([gaussian_2d,sine_squared_2d])
+run_examples([sine_sum, gaussian_2d,sine_squared_2d])
 
 

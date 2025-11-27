@@ -61,7 +61,7 @@ def simulate_adv_diff_2d(
         plot: If True, plots the initial condition and the solutions
 
     Outputs:
-        - 3D surface plots of the initial condition, fourier solution, and quantum solution at final time time if plot = True. 
+        - 3D surface plots of the initial condition, fourier solution, and quantum solution at final time if plot = True. 
         - Gate counts and circuit depth if report_complexity=True.
         - Success rate of postselection
         - Max errors between quantum and fourier solutions if compute_exact = True.
@@ -156,7 +156,7 @@ def simulate_adv_diff_2d(
     fourier_result = None
     if compute_exact:
         if diff_coeff != 0:
-            fourier_func = fourier_approximation_2d(*fourier_coefficients_2d(init_f, 1e-5, domain_length), domain_length)
+            fourier_func = fourier_approximation_2d(*fourier_coefficients_2d(init_f, 1e-8, domain_length), domain_length)
             fourier_result = fourier_func(X, Y, time, diff_coeff, adv_speed_x, adv_speed_y)
         else:  # pure advection
             fourier_result = init_f((X - adv_speed_x * time) % domain_length, (Y - adv_speed_y * time) % domain_length)
@@ -164,8 +164,15 @@ def simulate_adv_diff_2d(
     # Statevector simulation
     statevec_result = None
     if sim_type != "meas":
-        sv = Statevector.from_instruction(qc)
-        statevec_result = np.asarray(sv.data).reshape(num_points, num_points, 2 ** num_anc)[:, :, 0]
+        # using Aer statevector simulator
+        simulator = AerSimulator(method='statevector')
+        qc_sv = qc.copy()
+        qc_sv.save_statevector()
+        qc_sv = transpile(qc_sv, simulator)
+        result = simulator.run(qc_sv).result()
+        sv_data = result.get_statevector(qc_sv)
+        statevec_result = np.asarray(sv_data).reshape(num_points, num_points, 2 ** num_anc)[:, :, 0]
+
         if sim_type != "both":
             success_rate = np.linalg.norm(statevec_result) ** 2
         # Rescale according to method
@@ -230,14 +237,14 @@ def simulate_adv_diff_2d(
         fig = plt.figure(figsize=(21, 6))
         z_min, z_max = np.min(init_values), np.max(init_values)
         data = [init_values, fourier_result] if compute_exact else [init_values]
-        titles = ["Initial Condition", rf"Exact Solution at Final Time $T = {time}$"] if compute_exact else ["Initial Condition"]
+        titles = ["Initial Condition", rf"Exact Solution at Time $T = {time}$"] if compute_exact else ["Initial Condition"]
 
         if sim_type != "meas": 
             data.append(statevec_result.real)
-            titles.append(rf"Quantum Statevector at Final Time $T = {time}$")
+            titles.append(rf"Quantum Statevector at Time $T = {time}$")
         if sim_type != "sv":
             data.append(meas_result)
-            titles.append(rf"Quantum Measurements at Final Time $T = {time}$")
+            titles.append(rf"Quantum Measurements at Time $T = {time}$")
 
         for i, (title, Z) in enumerate(zip(titles, data), start=1):
             ax = fig.add_subplot(1, len(data), i, projection='3d')
