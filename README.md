@@ -99,7 +99,7 @@ When the simulation is complete for all final times, a table is displayed which 
 ```python
 # Import relevant modules and methods.
 import numpy as np
-from Adv_Diff_new import Simulation_QC_2D
+from Adv_Diff import Simulation_QC_2D
 
 # specify parameters for 2D simulation
 num_qubits = 6                                              # Number of qubits per spatial dimension
