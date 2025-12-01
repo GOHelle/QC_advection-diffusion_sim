@@ -144,7 +144,7 @@ def plot_simulations(
         if sim_type != "meas":
             axes[1].plot(x_common, statevec_result_interp.real, '--', color=colors[i], lw=1, label=f'statevector, order {orders[i]} ({num_qubits[i]} spatial qubits) ')
 
-    axes[1].set_title(rf'Results at Time $T = {time}$', fontsize=14)
+    axes[1].set_title(rf'Results at Time $T = {time:.3f}$', fontsize=14)
     axes[1].legend()
 
     # Determine min/max y-values across both plots
@@ -165,11 +165,11 @@ def plot_simulations(
     axes[2].set_title('Data Table')
 
     if diff_coef == 0:
-        super_title = rf"Advection Simulation with Advection Speed $c =$ {adv_speed}"
+        super_title = rf"Advection Simulation with Advection Speed $c =$ {adv_speed:.3f}"
     elif adv_speed == 0:
-        super_title = rf"Diffusion Simulation with Diffusion Coefficient $\nu =$ {diff_coef}"
+        super_title = rf"Diffusion Simulation with Diffusion Coefficient $\nu =$ {diff_coef:.3f}"
     else:
-        super_title = rf"Advection-Diffusion Simulation with Advection Speed $c =$ {adv_speed} and Diffusion Coefficient $\nu =$ {diff_coef}"
+        super_title = rf"Advection-Diffusion Simulation with Advection Speed $c =$ {adv_speed:.3f} and Diffusion Coefficient $\nu =$ {diff_coef:.3f}"
     plt.suptitle(super_title, fontsize=15)
     plt.tight_layout()
     plt.show()
@@ -221,13 +221,6 @@ def plot_simulations_2d(
             num_qubits_list[i], time, adv_speed_x, adv_speed_y, diff_coef, domain_length, init_f, shots, True, orders[i], tolerance, sim_type, True, False)
         results.append((x, y, init_fxy, meas_result, fourier_result, statevec_result, num_qubits_total, max_errors, success_rates, complexities))
 
-    # Define common grid
-    max_num_qubits = max(num_qubits_list)
-    xmin = max(r[0].min() for r in results)
-    xmax = min(r[0].max() for r in results)
-    ymin = max(r[1].min() for r in results)
-    ymax = min(r[1].max() for r in results)
-
     # Create summary table
     table = [
         [f"order {orders[i]}", num_qubits_list[i], num_qubits_total, f"{max_errors[0]:.3e}", f"{success_rates:.4f}", complexities[0], complexities[1]]
@@ -267,7 +260,7 @@ def plot_simulations_2d(
 
     # Plot exact solution
     ax_exact.plot_surface(X, Y, results[0][4], cmap='viridis')
-    ax_exact.set_title(f'Exact Solution at Time $T = {time}$', fontsize=14)
+    ax_exact.set_title(f'Exact Solution at Time $T = {time:.3f}$', fontsize=14)
     ax_exact.set_zlim(z_min, z_max)
     ax_exact.set_xlabel('x')
     ax_exact.set_ylabel('y')
@@ -280,9 +273,9 @@ def plot_simulations_2d(
         Z = results[i][5].real if sim_type=="sv" else results[i][3]
         ax.plot_surface(X, Y, Z, cmap='plasma')
         if sim_type == "sv":
-            ax.set_title(rf'Statevector at Time $T = {time}$ (Order {orders[i]})', fontsize=14)
+            ax.set_title(rf'Statevector at Time $T = {time:.3f}$ (Order {orders[i]})', fontsize=14)
         else:
-            ax.set_title(rf'Measurements at Time $T = {time}$ (Order {orders[i]})', fontsize=14)
+            ax.set_title(rf'Measurements at Time $T = {time:.3f}$ (Order {orders[i]})', fontsize=14)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlim(z_min, z_max)
@@ -298,11 +291,11 @@ def plot_simulations_2d(
     ax_table.set_title('Data Table', fontsize=14)
 
     if diff_coef == 0:
-        super_title = rf"2D Advection Simulation with Advection Speeds $c_x = {adv_speed_x}, \; c_y = {adv_speed_y}$"
+        super_title = rf"2D Advection Simulation with Advection Speeds $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
     elif adv_speed_x == 0 and adv_speed_y == 0:
-        super_title = rf"2D Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef}$"
+        super_title = rf"2D Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3f}$"
     else:
-        super_title = rf"2D Advection–Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef}$ and Advection Speeds $c_x = {adv_speed_x}, \; c_y = {adv_speed_y}$"
+        super_title = rf"2D Advection–Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3f}$ and Advection Speeds $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
     fig.suptitle(super_title, fontsize=15)
     plt.tight_layout()
     plt.show()

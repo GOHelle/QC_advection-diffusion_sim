@@ -185,7 +185,7 @@ def simulate_adv_diff(
             meas_results.append(meas_result)
             success_rate = total_selected / shots
             success_rates.append(success_rate)
-            print(f"\n-- SUCCESS RATE -- \nsucces rate of postselection: {success_rate}\n ")
+            print(f"\n-- SUCCESS RATE -- \nsucces rate of postselection: {success_rate:.4f}\n ")
 
         # Printing gate counts and circuit depth
         if report_complexity:
@@ -202,11 +202,11 @@ def simulate_adv_diff(
             max_err_entry = []
             if sim_type != "sv":
                 max_err_meas = np.max(np.abs(meas_result - fourier_result))
-                print(f"Max error from measurement: {max_err_meas}")
+                print(f"Max error from measurement: {max_err_meas:.4f}")
                 max_err_entry.append(max_err_meas)
             if sim_type != "meas":
                 max_err_sv = np.max(np.abs(statevec_result - fourier_result))
-                print(f"Max error from statevector: {max_err_sv}\n")
+                print(f"Max error from statevector: {max_err_sv:.4f}\n")
                 max_err_entry.append(max_err_sv)
             max_errors.append(max_err_entry)
 
@@ -223,7 +223,7 @@ def simulate_adv_diff(
             if sim_type != "meas": plt.plot(x, statevec_result.real, label="Quantum Statevector")
             if compute_exact: plt.plot(x, fourier_result, label="Exact Solution (Fourier)")
             plt.ylim(y_min - 0.05, y_max + 0.05)
-            plt.title(rf"Results at Time $T = {times[i]}$")
+            plt.title(rf"Results at Time $T = {times[i]:.3f}$")
             plt.legend()
 
     if plot:
@@ -231,10 +231,12 @@ def simulate_adv_diff(
         print("-- SUMMARY --")
         table, headers = [], ["time"]
         for i, t in enumerate(times):
-            row = [t]
-            if compute_exact: row.append(max_errors[i][0])
-            row.append(success_rates[i])
-            if report_complexity: row.extend(complexities[i][0:2])
+            row = [f"{t:.3f}"]
+            if compute_exact: row.append(f"{max_errors[i][0]:.3f}")
+            row.append(f"{success_rates[i]:.4f}")
+            if report_complexity: 
+                row.append(f"{complexities[i][0]:.5f}")
+                row.append(f"{complexities[i][1]:.5f}")
             table.append(row)
 
         if compute_exact:
@@ -248,13 +250,13 @@ def simulate_adv_diff(
         # Plot
         if method == "pure_adv": 
             title_str = f"Advection Simulation of Order {order} with {num_qubits} Spatial Qubits\n" \
-                        rf"Advection Speeds is $c = {adv_speed}$"
+                        rf"Advection Speeds is $c = {adv_speed:.3f}$"
         elif method == "pure_diff": 
             title_str = f"Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits\n" \
-                        rf"Diffusion Coefficient is $\nu = {diff_coeff}$"
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3f}$"
         else: 
             title_str = f"Advection-Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits\n" \
-                        rf"Diffusion Coefficient is $\nu = {diff_coeff}$, and Advection Speed is $c = {adv_speed}$"
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3f}$, and Advection Speed is $c = {adv_speed:.3f}$"
         plt.suptitle(title_str, fontsize=15)
         plt.tight_layout()
         plt.show()

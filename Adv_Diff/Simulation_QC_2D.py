@@ -119,8 +119,8 @@ def simulate_adv_diff_2d(
     qc = QuantumCircuit(qr_anc, qr, cr_anc, cr)
 
     # Spatial grid and normalized initial state preparation
-    x = np.linspace(0, domain_length, num_points)
-    y = np.linspace(0, domain_length, num_points)
+    x = np.linspace(0, domain_length, num_points, endpoint=False)
+    y = np.linspace(0, domain_length, num_points, endpoint=False)
     X, Y = np.meshgrid(x, y)
     init_values = init_f(X, Y) 
     if not np.all(init_values >= 0):
@@ -208,7 +208,7 @@ def simulate_adv_diff_2d(
         meas_result /= adv_scale if method_y == "pure_adv" else (2 * diff_scale if method_y == "pure_diff" else 1)
 
         success_rate = total_selected / shots
-        print(f"\n-- SUCCESS RATE -- \n succes rate of postselection: {success_rate} ")
+        print(f"\n-- SUCCESS RATE -- \n succes rate of postselection: {success_rate:.4f} ")
 
     # Printing gate counts and circuit depth
     if report_complexity:
@@ -226,25 +226,25 @@ def simulate_adv_diff_2d(
         if sim_type != "sv": 
             max_err_meas = np.max(np.abs(meas_result - fourier_result))
             max_err.append(max_err_meas)
-            print(f"Max error from measurement: {max_err_meas}")
+            print(f"Max error from measurement: {max_err_meas:.4f}")
         if sim_type != "meas": 
             max_err_sv = np.max(np.abs(statevec_result - fourier_result))
             max_err.append(max_err_sv)
-            print(f"Max error from statevector: {max_err_sv}")
+            print(f"Max error from statevector: {max_err_sv:.4f}")
 
     # Plotting
     if plot:
         fig = plt.figure(figsize=(21, 6))
         z_min, z_max = np.min(init_values), np.max(init_values)
         data = [init_values, fourier_result] if compute_exact else [init_values]
-        titles = ["Initial Condition", rf"Exact Solution at Time $T = {time}$"] if compute_exact else ["Initial Condition"]
+        titles = ["Initial Condition", rf"Exact Solution at Time $T = {time:.3f}$"] if compute_exact else ["Initial Condition"]
 
         if sim_type != "meas": 
             data.append(statevec_result.real)
-            titles.append(rf"Quantum Statevector at Time $T = {time}$")
+            titles.append(rf"Quantum Statevector at Time $T = {time:.3f}$")
         if sim_type != "sv":
             data.append(meas_result)
-            titles.append(rf"Quantum Measurements at Time $T = {time}$")
+            titles.append(rf"Quantum Measurements at Time $T = {time:.3f}$")
 
         for i, (title, Z) in enumerate(zip(titles, data), start=1):
             ax = fig.add_subplot(1, len(data), i, projection='3d')
@@ -256,13 +256,13 @@ def simulate_adv_diff_2d(
 
         if diff_coeff == 0: 
             title_str = f"2D Advection Simulation of Order {order} with {num_qubits} Spatial Qubits per Dimension\n" \
-                        rf"Advection Speeds are $c_x = {adv_speed_x}, \; c_y = {adv_speed_y}$"
+                        rf"Advection Speeds are $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
         elif adv_speed_x == 0 and adv_speed_y == 0: 
             title_str = f"2D Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits per Dimension\n" \
-                        rf"Diffusion Coefficient is $\nu = {diff_coeff}$"
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3f}$"
         else: 
             title_str = f"2D Advection-Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits per Dimension\n" \
-                        rf"Diffusion Coefficient is $\nu = {diff_coeff}$, and Advection Speeds are $c_x = {adv_speed_x}, \; c_y = {adv_speed_y}$"
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3f}$, and Advection Speeds are $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
         fig.suptitle(title_str, fontsize=16)
         plt.tight_layout()
         plt.show()
