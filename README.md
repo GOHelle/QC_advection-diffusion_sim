@@ -129,6 +129,8 @@ It will also print the number of Fourier modes, succes rate, complexity, max err
 
 ## Dependencies
 
+- qiskit
+- qiskit-aer
 - numpy
 - matplotlib
 - pyqsp
