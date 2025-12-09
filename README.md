@@ -139,4 +139,11 @@ It will also print the number of Fourier modes, succes rate, complexity, max err
 - typing
 
 All of the above can be installed using pip install.
-For details on the pyqsp package see https://github.com/ichuang/pyqsp
+
+## References
+
+The QSP angle sequences used in the QSVT construction are generated via the pyqsp package.  
+The underlying Quantum Signal Processing (QSP) methods were originally developed in QSPPACK, on which pyqsp is based.
+
+- QSPPACK: https://qsppack.gitbook.io/qsppack/ 
+- pyqsp: https://github.com/ichuang/pyqsp
