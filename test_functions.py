@@ -124,10 +124,11 @@ def plot_simulations(
         for i, (_, _, _, _, _, num_qubits_total, max_errors, success_rates, complexities) in enumerate(results)]
     print(f"\n-- SUMMARY --")
     error_type = "meas." if sim_type == "meas" else "sv"
-    print(tabulate(table, headers=['', 'spatial qubits', 'total qubits', f'error ({error_type})', 'success rate', '1-qubit gates', 'CNOT gates'], tablefmt="simple_grid"))
+    headers=['', 'spatial qubits', 'total qubits', f'error ({error_type})', 'success rate', '1-qubit gates', 'CNOT gates']
+    print(tabulate(table, headers=headers, tablefmt="simple_grid", colalign=("center",)*len(headers)))
     
     # Plot
-    _, axes = plt.subplots(3, 1, figsize=(13, 9.5), constrained_layout=True)
+    _, axes = plt.subplots(3, 1, figsize=(11, 10), constrained_layout=True, gridspec_kw={'height_ratios': [2.5, 2.5, 1]})
 
     # Plot initial condition
     axes[0].plot(x_common, interp_results[0][0], lw=1, color="b")
@@ -144,7 +145,9 @@ def plot_simulations(
         if sim_type != "meas":
             axes[1].plot(x_common, statevec_result_interp.real, '--', color=colors[i], lw=1, label=f'statevector, order {orders[i]} ({num_qubits[i]} spatial qubits) ')
 
-    axes[1].set_title(rf'Results at Time $T = {time:.3f}$', fontsize=14)
+    time_str = str(time)
+    if len(time_str) > 4: time_str = time_str[:4]
+    axes[1].set_title(rf'Results at Time $T = {time_str}$', fontsize=14)
     axes[1].legend()
 
     # Determine min/max y-values across both plots
@@ -162,15 +165,17 @@ def plot_simulations(
     tbl.scale(1,2)
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(12)
-    axes[2].set_title('Data Table')
+    _ = [cell.set_text_props(ha='center', va='center') for cell in tbl.get_celld().values()]
+    axes[2].set_title('Data Table', fontsize=14)
 
+    # Set super title
     if diff_coef == 0:
-        super_title = rf"Advection Simulation with Advection Speed $c =$ {adv_speed:.3f}"
+        super_title = rf"Advection Simulation with Advection Speed $c =$ {adv_speed:.3g}"
     elif adv_speed == 0:
-        super_title = rf"Diffusion Simulation with Diffusion Coefficient $\nu =$ {diff_coef:.3f}"
+        super_title = rf"Diffusion Simulation with Diffusion Coefficient $\nu =$ {diff_coef:.3g}"
     else:
-        super_title = rf"Advection-Diffusion Simulation with Advection Speed $c =$ {adv_speed:.3f} and Diffusion Coefficient $\nu =$ {diff_coef:.3f}"
-    plt.suptitle(super_title, fontsize=15)
+        super_title = rf"Advection-Diffusion Simulation with Advection Speed $c =$ {adv_speed:.3g} and Diffusion Coefficient $\nu =$ {diff_coef:.3g}"
+    plt.suptitle(super_title, fontsize=16)
     plt.tight_layout()
     plt.show()
 
@@ -223,14 +228,15 @@ def plot_simulations_2d(
 
     # Create summary table
     table = [
-        [f"order {orders[i]}", num_qubits_list[i], num_qubits_total, f"{max_errors[0]:.3e}", f"{success_rates:.4f}", complexities[0], complexities[1]]
+        [f"order {orders[i]}", num_qubits_list[i] * 2, num_qubits_total, f"{max_errors[0]:.3e}", f"{success_rates:.4f}", complexities[0], complexities[1]]
         for i, (_, _, _, _, _, _, num_qubits_total, max_errors, success_rates, complexities) in enumerate(results)
     ]
     print(f"\n-- SUMMARY --")
-    print(tabulate(table, headers=['', f'spatial qubits / dim.', 'total qubits', f'error', 'success rate', '1-qubit gates', 'CNOT gates'], tablefmt="simple_grid"))
+    headers=['', f'spatial qubits', 'total qubits', f'error', 'success rate', '1-qubit gates', 'CNOT gates']
+    print(tabulate(table, headers=headers, tablefmt="simple_grid", colalign=("center",)*len(headers)))
 
     # Set up figure and axes
-    fig = plt.figure(figsize=(13, 10))
+    fig = plt.figure(figsize=(11, 11))
     gs = fig.add_gridspec(3, 2, height_ratios=[4, 4, 1])
     ax_init = fig.add_subplot(gs[0, 0], projection='3d')  # initial
     ax_exact = fig.add_subplot(gs[0, 1], projection='3d')  # exact
@@ -260,7 +266,9 @@ def plot_simulations_2d(
 
     # Plot exact solution
     ax_exact.plot_surface(X, Y, results[0][4], cmap='viridis')
-    ax_exact.set_title(f'Exact Solution at Time $T = {time:.3f}$', fontsize=14)
+    time_str = str(time)
+    if len(time_str) > 4: time_str = time_str[:4]
+    ax_exact.set_title(f'Exact Solution at Time $T = {time_str}$', fontsize=14)
     ax_exact.set_zlim(z_min, z_max)
     ax_exact.set_xlabel('x')
     ax_exact.set_ylabel('y')
@@ -273,9 +281,9 @@ def plot_simulations_2d(
         Z = results[i][5].real if sim_type=="sv" else results[i][3]
         ax.plot_surface(X, Y, Z, cmap='plasma')
         if sim_type == "sv":
-            ax.set_title(rf'Statevector at Time $T = {time:.3f}$ (Order {orders[i]})', fontsize=14)
+            ax.set_title(rf'Statevector at Time $T = {time_str}$ (Order {orders[i]})', fontsize=14)
         else:
-            ax.set_title(rf'Measurements at Time $T = {time:.3f}$ (Order {orders[i]})', fontsize=14)
+            ax.set_title(rf'Measurements at Time $T = {time_str}$ (Order {orders[i]})', fontsize=14)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlim(z_min, z_max)
@@ -283,20 +291,26 @@ def plot_simulations_2d(
     # Table
     ax_table.axis('off')
     tbl = ax_table.table(cellText=table,
-                         colLabels=['', f'spatial qubits / dim.', 'total qubits', f'error', 'success rate', '1-qubit gates', 'CNOT gates'],
+                         colLabels=['', f'spatial qubits', 'total qubits', f'error', 'success rate', '1-qubit gates', 'CNOT gates'],
                          loc='center')
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(12)
     tbl.scale(1.2, 1.6)
+    _ = [cell.set_text_props(ha='center', va='center') for cell in tbl.get_celld().values()]
     ax_table.set_title('Data Table', fontsize=14)
 
+    # Set super title
     if diff_coef == 0:
-        super_title = rf"2D Advection Simulation with Advection Speeds $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
+        super_title = rf"2D Advection Simulation with Advection Speeds $c_x = {adv_speed_x:.3g}, \; c_y = {adv_speed_y:.3g}$"
     elif adv_speed_x == 0 and adv_speed_y == 0:
-        super_title = rf"2D Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3f}$"
+        super_title = rf"2D Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3g}$"
     else:
-        super_title = rf"2D Advection–Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3f}$ and Advection Speeds $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
-    fig.suptitle(super_title, fontsize=15)
+        super_title = (
+        rf"2D Advection–Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3g}$"
+        f"\nand Advection Speeds $c_x = {adv_speed_x:.3g}, c_y = {adv_speed_y:.3g}$"
+    )
+        #super_title = rf"2D Advection–Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef}$ and Advection Speeds $c_x = {adv_speed_x}, \; c_y = {adv_speed_y}$"
+    fig.suptitle(super_title, fontsize=16)
     plt.tight_layout()
     plt.show()
 
@@ -348,6 +362,5 @@ def run_examples(examples = [gaussian, sine_sum, wave_pack, bump, rec, gaussian_
                 plot_simulations_2d(num_qubits_order=[(6,2),(5,4)], time=0.5, adv_speed_x=1, adv_speed_y=1, diff_coef=0.1, init_f=sine_squared_2d, shots=shots, tolerance=1e-6, sim_type='meas')
             plot_simulations_2d(num_qubits_order=[(6,2),(5,4)], time=0.5, adv_speed_x=1, adv_speed_y=1, diff_coef=0.1, init_f=sine_squared_2d, shots=shots, tolerance=1e-6, sim_type=sim_type)
 
-run_examples([sine_sum, gaussian_2d,sine_squared_2d])
-
+run_examples()
 

@@ -226,25 +226,25 @@ def simulate_adv_diff_2d(
         if sim_type != "sv": 
             max_err_meas = np.max(np.abs(meas_result - fourier_result))
             max_err.append(max_err_meas)
-            print(f"Max error from measurement: {max_err_meas:.4f}")
+            print(f"Max error from measurement: {max_err_meas:.3e}")
         if sim_type != "meas": 
             max_err_sv = np.max(np.abs(statevec_result - fourier_result))
             max_err.append(max_err_sv)
-            print(f"Max error from statevector: {max_err_sv:.4f}")
+            print(f"Max error from statevector: {max_err_sv:.3e}")
 
     # Plotting
     if plot:
         fig = plt.figure(figsize=(21, 6))
         z_min, z_max = np.min(init_values), np.max(init_values)
         data = [init_values, fourier_result] if compute_exact else [init_values]
-        titles = ["Initial Condition", rf"Exact Solution at Time $T = {time:.3f}$"] if compute_exact else ["Initial Condition"]
+        titles = ["Initial Condition", rf"Exact Solution at Time $T = {time}$"] if compute_exact else ["Initial Condition"]
 
         if sim_type != "meas": 
             data.append(statevec_result.real)
-            titles.append(rf"Quantum Statevector at Time $T = {time:.3f}$")
+            titles.append(rf"Quantum Statevector at Time $T = {time}$")
         if sim_type != "sv":
             data.append(meas_result)
-            titles.append(rf"Quantum Measurements at Time $T = {time:.3f}$")
+            titles.append(rf"Quantum Measurements at Time $T = {time}$")
 
         for i, (title, Z) in enumerate(zip(titles, data), start=1):
             ax = fig.add_subplot(1, len(data), i, projection='3d')
@@ -256,13 +256,13 @@ def simulate_adv_diff_2d(
 
         if diff_coeff == 0: 
             title_str = f"2D Advection Simulation of Order {order} with {num_qubits} Spatial Qubits per Dimension\n" \
-                        rf"Advection Speeds are $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
+                        rf"Advection Speeds are $c_x = {adv_speed_x:.3g}, \; c_y = {adv_speed_y:.3g}$"
         elif adv_speed_x == 0 and adv_speed_y == 0: 
             title_str = f"2D Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits per Dimension\n" \
-                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3f}$"
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3g}$"
         else: 
             title_str = f"2D Advection-Diffusion Simulation of Order {order} with {num_qubits} Spatial Qubits per Dimension\n" \
-                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3f}$, and Advection Speeds are $c_x = {adv_speed_x:.3f}, \; c_y = {adv_speed_y:.3f}$"
+                        rf"Diffusion Coefficient is $\nu = {diff_coeff:.3g}$, and Advection Speeds are $c_x = {adv_speed_x:.3g}, \; c_y = {adv_speed_y:.3g}$"
         fig.suptitle(title_str, fontsize=16)
         plt.tight_layout()
         plt.show()
