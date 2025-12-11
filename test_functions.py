@@ -128,14 +128,14 @@ def plot_simulations(
     print(tabulate(table, headers=headers, tablefmt="simple_grid", colalign=("center",)*len(headers)))
     
     # Plot
-    _, axes = plt.subplots(3, 1, figsize=(11, 10), constrained_layout=True, gridspec_kw={'height_ratios': [2.5, 2.5, 1]})
+    _, axes = plt.subplots(3, 1, figsize=(11, 10), constrained_layout=True, gridspec_kw={'height_ratios': [1, 1, 0.2*len(table)]})
 
     # Plot initial condition
     axes[0].plot(x_common, interp_results[0][0], lw=1, color="b")
     axes[0].set_title(rf'Initial Condition', fontsize=14)
 
     # Plot all orders together
-    colors = ["r", "g", "m", "c", "y"]
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     for i in range(len(orders)):
         init_fx_interp, fourier_result_interp, meas_result_interp, statevec_result_interp, _, _, _ = interp_results[i]
         if i == 0:
