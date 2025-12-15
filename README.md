@@ -1,7 +1,7 @@
 ## A Python Package for Quantum Simulation of the Advection-Diffusion Equation
 
 ## Introduction
-This repository contains Python code for simulating the advection–diffusion equation using quantum circuits and comparing the results to classical Fourier-based approximations. It utilizes Quantum Singular Value Transformation (QSVT) to simulate the evolution of an initial condition under the advection-diffusion dynamics. The package provides both 1D and 2D quantum simulations and supports not only the full advection-diffusion dynamics, but also the pure diffusion and pure advection cases. For these special cases, the QSVT construction is optimized to use the least number of qubits necessary.
+This repository contains Python code for simulating the advection–diffusion equation using quantum circuits and comparing the results to classical Fourier-based approximations. It utilizes Quantum Singular Value Transformation (QSVT) to simulate the evolution of an initial condition under the advection-diffusion dynamics. The package provides both 1D and 2D quantum simulations and supports not only the full advection-diffusion dynamics, but also optimized constructions for the pure diffusion and pure advection cases.
 
 #### 1D Advection–Diffusion Equation
 ```math
@@ -143,7 +143,7 @@ All of the above can be installed using pip install.
 ## References
 
 The QSP angle sequences used in the QSVT construction are generated via the pyqsp package.  
-The underlying Quantum Signal Processing method calle3d sym_qsp was originally developed in the MATLAB package QSPPACK, on which this part of the pyqsp package is based.
+The underlying Quantum Signal Processing method (sym_qsp) was originally developed in the MATLAB package QSPPACK, on which this part of the pyqsp package is based.
 
 - QSPPACK: https://qsppack.gitbook.io/qsppack/ 
 - pyqsp: https://github.com/ichuang/pyqsp
