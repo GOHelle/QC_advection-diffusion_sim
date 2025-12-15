@@ -143,7 +143,7 @@ All of the above can be installed using pip install.
 ## References
 
 The QSP angle sequences used in the QSVT construction are generated via the pyqsp package.  
-The underlying Quantum Signal Processing methods were originally developed in QSPPACK, on which pyqsp is based.
+The underlying Quantum Signal Processing method calle3d sym_qsp was originally developed in the MATLAB package QSPPACK, on which this part of the pyqsp package is based.
 
 - QSPPACK: https://qsppack.gitbook.io/qsppack/ 
 - pyqsp: https://github.com/ichuang/pyqsp
