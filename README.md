@@ -54,7 +54,7 @@ In addition to the main Adv_Diff directory, there are supporting modules located
 - **`Simulation_QC_2D.py`**  
   Extends the simulation framework to 2D  
   - Assigns equal numbers of qubits to each spatial direction.  
-  - Constructs QSVT circuits separately for each direction, roughly doubling the ancilla requirements compared to 1D.  
+  - Constructs QSVT circuits separately for each direction and composes them using one additional ancilla qubit.
   - Produces 3D surface plots of the initial condition, Fourier approximation, and quantum result at the final time.  
   - Reports maximal error, success probability, and gate count if instructed to. 
 
