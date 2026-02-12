@@ -72,22 +72,20 @@ def prep(order: int) -> tuple[QuantumCircuit, QuantumCircuit]:
           
     elif order == 4:
         theta = 2 * np.arcsin(np.sqrt(2) * 2 / 3)
-
         qc1 = QuantumCircuit(3)
-        qc1.ry(-theta, 0)
         qc1.x(2)
         qc1.s(2)
-        qc1.ch(0, 2, ctrl_state="0")
         qc1.x(2)
-        qc1.x(1)
-        qc1.ch(0, 1, ctrl_state="1")
-        qc1.x(1)
+
+        qc1.ry(theta, 0)
+        qc1.cry(3 * np.pi/2, 0, 2, ctrl_state = "0")
+        qc1.cry(-np.pi/2, 0, 1)
         prep_gate_1 = qc1.to_gate()
 
         qc2 = QuantumCircuit(3)
         qc2.ry(theta, 0)
-        qc2.ch(0, 2, ctrl_state="0")
-        qc2.ch(0, 1, ctrl_state="1")
+        qc2.cry(np.pi/2, 0, 2, ctrl_state = "0")
+        qc2.cry(np.pi/2, 0, 1)
         prep_gate_2 = qc2.to_gate()
 
         return prep_gate_1, prep_gate_2
