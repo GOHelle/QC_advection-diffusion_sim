@@ -129,7 +129,9 @@ It will also print the number of Fourier modes, succes rate, complexity, max err
 
 ## Dependencies
 
-- qiskit
+The following packages are required. All can be installed using `pip install`:
+
+- qiskit<2.1
 - qiskit-aer
 - numpy
 - matplotlib
@@ -138,7 +140,7 @@ It will also print the number of Fourier modes, succes rate, complexity, max err
 - tabulate
 - typing
 
-All of the above can be installed using pip install.
+> **Note:** An older version of Qiskit is required due to an unresolved issue present with newer versions. This issue affects certain runs of the 2D simulation and is particularly prevalent when using order 4.
 
 ## References
 
