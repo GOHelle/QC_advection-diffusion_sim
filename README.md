@@ -59,7 +59,7 @@ In addition to the main Adv_Diff directory, there are supporting modules located
   - Reports maximal error, success probability, and gate count if instructed to. 
 
 ## Examples
-To use the repository for simulating advection-diffusion in either 1D or 2D, place the Adv_Diff folder in your working directory, import Simulation_QC or Simulation_QC_2D in your file, and run the Sim() method from the repsective file with your intended parameters specified. See the examples below. 
+To use the repository for simulating advection-diffusion in either 1D or 2D, place the Adv_Diff folder in your working directory, import Simulation_QC or Simulation_QC_2D in your file, and run the Sim() method from the respective file with your intended parameters specified. See the examples below. 
 
 #### 1D Simulation Example
 
@@ -131,7 +131,7 @@ It will also print the number of Fourier modes, succes rate, complexity, max err
 
 The following packages are required. All can be installed using `pip install`:
 
-- qiskit<2.1
+- qiskit
 - qiskit-aer
 - numpy
 - matplotlib
@@ -139,8 +139,6 @@ The following packages are required. All can be installed using `pip install`:
 - scipy
 - tabulate
 - typing
-
-> **Note:** An older version of Qiskit is required due to an unresolved issue present with newer versions. This issue affects certain runs of the 2D simulation and is particularly prevalent when using order 4.
 
 ## References
 
