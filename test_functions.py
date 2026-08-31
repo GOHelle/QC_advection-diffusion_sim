@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 from tabulate import tabulate
 from scipy.interpolate import interp1d
 from typing import Callable
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import matplotlib.patches as patches
+from scipy.interpolate import RegularGridInterpolator
+from matplotlib.lines import Line2D
 
 """ This file contains several test functions to be used as initial conditions for the advection-diffusion equation.
     It also contains functions plot_simulations, plot_simulations_2d, and run_examples which run and plot simulations using these test functions. 
@@ -21,32 +25,14 @@ def gaussian_2d(x, y, c = (5/3, 2), scale = 7):
 def sine_squared_2d(x, y, c = 0.5):
     return np.sin(np.pi * (c * x + y)) ** 2
 
+def mixed_wave_2d(x, y):
+    return np.exp(-7 * (x - 2) ** 2) * (1 + np.sin(5 * np.pi * y / 2))
+
 def sine_sum(x, k1 = 3, k2 = 11):
     return 0.5 * np.sin((k1 / 2) * np.pi * x) + 0.5 * np.sin((k2 / 2) * np.pi * x) + 1
     
 def wave_pack(x, k = 17):
     return np.exp(-5 * (x - 2) ** 2) * 0.5 * np.cos((k / 2) * np.pi * (x - 2)) + 0.6
-
-def b(x):
-  # helper function used to define Bump(x)
-    x = np.asarray(x)
-    y = np.zeros_like(x)
-    z = np.zeros_like(x)
-    mask_y = x > 0
-    mask_z = x < 1
-    y[mask_y] = np.exp(-1 / x[mask_y])
-    z[mask_z] = np.exp(1 / (x[mask_z] - 1))
-    return y / (y + z)
-
-def bump(x, I = [1, 1.5, 2.5, 3]):
-    """
-    I = (a, b, c, d), a < b < c < d 
-    Bump(x) = 1 for x in [b, c]
-    Bump(x) = 0 for x not in (a, d)
-    Bump(x) in (0, 1) for x in (a, b) union (c, d)
-    """
-    
-    return b((x - I[0]) / (I[1] - I[0])) * b((I[3] - x) / (I[3] - I[2]))
     
 def rec(x):
     x = np.asarray(x)
@@ -54,6 +40,51 @@ def rec(x):
     y[x < 2] = 1
     return y
 
+def zoom_window(
+    ax,
+    x,
+    y_series,
+    window_width_frac=0.04,
+    window_height_frac=0.2,
+):
+    """Determine the coordinates for a zoom window that focuses on the region where the curves differ most.
+    
+    Args:
+        ax: The matplotlib Axes object of the main plot.
+        x: The common x-grid for all curves.
+        y_series: List of y-value arrays corresponding to the different curves.
+        window_width_frac: Desired width of the zoom window as a fraction of the x-range.
+        window_height_frac: Desired height of the zoom window as a fraction of the y-range.
+    """
+
+    y_stack = np.vstack([np.asarray(y) for y in y_series])
+    spread = y_stack.max(axis=0) - y_stack.min(axis=0)
+
+    # pick x-center where curves differ most
+    idx = int(np.argmax(spread))
+    x0 = x[idx]
+    x_range = x.max() - x.min()
+    half_w = 0.5 * window_width_frac * x_range
+    x1, x2 = x0 - half_w, x0 + half_w
+    x1 = max(x1, x.min())
+    x2 = min(x2, x.max())
+
+    # compute y-limits in that window
+    mask = (x >= x1) & (x <= x2)
+    y_win = y_stack[:, mask]
+    y_low = float(np.min(y_win))
+    y_high = float(np.max(y_win))
+    y_center = 0.5 * (y_low + y_high)
+
+    # full y-range of original plot
+    full_ymin, full_ymax = ax.get_ylim()
+    full_y_range = full_ymax - full_ymin
+
+    half_h = 0.5 * window_height_frac * full_y_range
+    y1 = y_center - half_h
+    y2 = y_center + half_h
+
+    return (x1, x2), (y1, y2)
 
 def plot_simulations(
         num_qubits_order: list[tuple] = [(6, 2), (6, 4), (6, 6)], 
@@ -64,7 +95,11 @@ def plot_simulations(
         init_f: Callable = lambda x: np.exp(-10 * (x - 4 / 3) ** 2), 
         shots: int = 10 ** 6, 
         tolerance: float = 1e-8, 
-        sim_type: str = "both"
+        sim_type: str = "both",
+        window_position = None,  # "separate" OR "upper right", "lower left", etc.
+        window_width_frac=0.04,
+        window_height_frac=0.2,
+        legend_loc = "upper left",
         ):
     
     """ Run and visualize 1D advection–diffusion simulations for multiple (number of spatial qubits, order) configurations.
@@ -83,6 +118,10 @@ def plot_simulations(
         shots: Number of measurement shots (for sim_type = "meas").
         tolerance: Tolerance passed to the quantum simulation backend.
         sim_type: Specifies whether to plot statevector results ('sv'), measurement results ('meas), or both ('both').
+        window_position: If not None, specifies the position of a zoomed-in view of the plot. if "separate", a separate subplot is created for the zoomed view. 
+                         Otherwise, should be a valid position string (e.g. "upper right").
+        window_width_frac: Width of the zoom window as a fraction of the x-range.
+        window_height_frac: Height of the zoom window as a fraction of the y-range.
     """
 
     if sim_type not in ["sv", "meas", "both"]:  
@@ -127,28 +166,97 @@ def plot_simulations(
     headers=['', 'spatial qubits', 'total qubits', f'error ({error_type})', 'success rate', '1-qubit gates', 'CNOT gates']
     print(tabulate(table, headers=headers, tablefmt="simple_grid", colalign=("center",)*len(headers)))
     
-    # Plot
-    _, axes = plt.subplots(3, 1, figsize=(11, 10), constrained_layout=True, gridspec_kw={'height_ratios': [1, 1, 0.2*len(table)]})
-
+    if window_position == "separate":
+        _, axes = plt.subplots(3, 1, figsize=(6, 9), constrained_layout=True)      
+    else:
+        _, axes = plt.subplots(2, 1, figsize=(6, 6), constrained_layout=True)      
+ 
     # Plot initial condition
     axes[0].plot(x_common, interp_results[0][0], lw=1, color="b")
-    axes[0].set_title(rf'Initial Condition', fontsize=14)
+    axes[0].set_title(rf'Initial Condition', fontsize=13)
 
     # Plot all orders together
     colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
     for i in range(len(orders)):
         init_fx_interp, fourier_result_interp, meas_result_interp, statevec_result_interp, _, _, _ = interp_results[i]
         if i == 0:
-            axes[1].plot(x_common, fourier_result_interp, color="b", lw=1, label=f'exact solution (Fourier)')
+            axes[1].plot(x_common, fourier_result_interp, color="b", lw=1, label=f'exact')
         if sim_type != "sv":
-            axes[1].plot(x_common, meas_result_interp, color = colors[i], lw=1, label=f'measurements, order {orders[i]} ({num_qubits[i]} spatial qubits)')
+            axes[1].plot(x_common, meas_result_interp, color = colors[i], lw=1, label=f'ord{orders[i]}, spq={num_qubits[i]}')
         if sim_type != "meas":
-            axes[1].plot(x_common, statevec_result_interp.real, '--', color=colors[i], lw=1, label=f'statevector, order {orders[i]} ({num_qubits[i]} spatial qubits) ')
+            axes[1].plot(x_common, statevec_result_interp.real, '--', color=colors[i], lw=1, label=f'ord{orders[i]}, spq={num_qubits[i]}')
 
     time_str = str(time)
     if len(time_str) > 4: time_str = time_str[:4]
-    axes[1].set_title(rf'Results at Time $T = {time_str}$', fontsize=14)
-    axes[1].legend()
+    axes[1].set_title(rf'Results at $T = {time_str}$', fontsize=13)
+    axes[1].legend(loc=legend_loc, fontsize=9, labelspacing=0.25,)
+
+    # Build list of curves for the zoom to focus on 
+    y_series_for_zoom = []
+    y_series_for_zoom.append(interp_results[0][1])  # fourier_result_interp
+    for i in range(len(orders)):
+        _, _, meas_result_interp, statevec_result_interp, _, _, _ = interp_results[i]
+        if sim_type != "sv" and meas_result_interp is not None:
+            y_series_for_zoom.append(meas_result_interp)
+        if sim_type != "meas" and statevec_result_interp is not None:
+            y_series_for_zoom.append(statevec_result_interp.real)
+
+    ax = axes[1]
+    (x1, x2), (y1, y2) = zoom_window(ax, x_common, y_series_for_zoom, window_width_frac=window_width_frac, window_height_frac=window_height_frac)     # zoom window widths and height as fraction of y-range
+
+    if window_position:
+        if window_position == "separate":
+            # add separate zoomed-in plot as third subplot 
+            for line in ax.lines:
+                axes[2].plot(
+                    line.get_xdata(),
+                    line.get_ydata(),
+                    linestyle=line.get_linestyle(),
+                    linewidth=line.get_linewidth(),
+                    color=line.get_color(),
+                    marker=line.get_marker(),
+                    label=line.get_label(),
+                )
+            axes[2].set_xlim(x1, x2)
+            axes[2].set_ylim(y1, y2)
+            axes[2].set_title('Zoomed View', fontsize=13)
+            axes[2].legend(loc='upper left', fontsize=9, labelspacing=0.25,)
+
+        else:
+            # create inset
+            axins = inset_axes(ax, width="28%", height="40%", loc=window_position, borderpad=1.0)
+            axins.patch.set_alpha(0.75)
+            # split window position string by space to get e.g upper, right
+            x_label_pos, y_label_pos = window_position.split()
+            if x_label_pos == "upper":
+                axins.xaxis.tick_bottom()
+                axins.xaxis.set_label_position("bottom")
+            else:
+                axins.xaxis.tick_top()
+                axins.xaxis.set_label_position("top")
+            if y_label_pos == "right":
+                axins.yaxis.tick_left()
+                axins.yaxis.set_label_position("left")
+            else:
+                axins.yaxis.tick_right()
+                axins.yaxis.set_label_position("right")
+
+            for line in ax.lines:
+                axins.plot(
+                    line.get_xdata(),
+                    line.get_ydata(),
+                    linestyle=line.get_linestyle(),
+                    linewidth=line.get_linewidth(),
+                    color=line.get_color(),
+                    marker=line.get_marker(),
+                )
+
+            axins.set_xlim(x1, x2)
+            axins.set_ylim(y1, y2)
+
+        # draw rectangle on main plot
+        rect = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, ec="0.3", lw=1)
+        ax.add_patch(rect)
 
     # Determine min/max y-values across both plots
     y_min = min(axes[0].get_ylim()[0], axes[1].get_ylim()[0])
@@ -158,24 +266,6 @@ def plot_simulations(
     axes[0].set_ylim(y_min, y_max)
     axes[1].set_ylim(y_min, y_max)
 
-    # Adding the table to the plot
-    headers = ['', 'spatial qubits', 'total qubits', f'error ({error_type})', 'success rate', '1-qubit gates', 'CNOT gates']
-    axes[2].axis('off')
-    tbl = axes[2].table(cellText = table, colLabels = headers, loc = 'center')
-    tbl.scale(1,2)
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(12)
-    _ = [cell.set_text_props(ha='center', va='center') for cell in tbl.get_celld().values()]
-    axes[2].set_title('Data Table', fontsize=14)
-
-    # Set super title
-    if diff_coef == 0:
-        super_title = rf"Advection Simulation with Advection Speed $c =$ {adv_speed:.3g}"
-    elif adv_speed == 0:
-        super_title = rf"Diffusion Simulation with Diffusion Coefficient $\nu =$ {diff_coef:.3g}"
-    else:
-        super_title = rf"Advection-Diffusion Simulation with Advection Speed $c =$ {adv_speed:.3g} and Diffusion Coefficient $\nu =$ {diff_coef:.3g}"
-    plt.suptitle(super_title, fontsize=16)
     plt.tight_layout()
     plt.show()
 
@@ -190,7 +280,8 @@ def plot_simulations_2d(
         init_f: Callable = lambda X, Y: np.sin(np.pi * (0.5 * X + Y)) ** 2,
         shots: int = 10 ** 7,
         tolerance: float = 1e-6, 
-        sim_type: str = "sv"
+        sim_type: str = "sv",
+        zoom_window_frac=0.25,
         ):
     
     """Run and visualize 2D advection–diffusion simulations for two (spatial qubits per dimension, order) configurations.
@@ -208,6 +299,7 @@ def plot_simulations_2d(
     shots: Number of measurement shots (for sim_type = "meas").
     tolerance: Tolerance passed to the quantum simulation backend.
     sim_type : Whether to visualize statevector ('sv') or measurement ('meas') results.
+    zoom_window_frac: ratio between the size zoomed window plot and the main plot
     """
 
     if len(num_qubits_order) != 2:
@@ -221,9 +313,10 @@ def plot_simulations_2d(
     num_qubits_list = [num_qubits for (num_qubits, _) in num_qubits_order]
 
     # Run simulations
-    for i in range(2):
+    for i in range(2): 
         x, y, init_fxy, meas_result, fourier_result, statevec_result, num_qubits_total, max_errors, success_rates, complexities = Simulation_QC_2D.simulate_adv_diff_2d(
-            num_qubits_list[i], time, adv_speed_x, adv_speed_y, diff_coef, domain_length, init_f, shots, True, orders[i], tolerance, sim_type, True, False)
+            num_qubits_list[i], time, adv_speed_x, adv_speed_y, diff_coef, domain_length, init_f, shots, True, orders[i], tolerance, sim_type, True, False)     
+        # complexities = [0, 0, 0, 0]
         results.append((x, y, init_fxy, meas_result, fourier_result, statevec_result, num_qubits_total, max_errors, success_rates, complexities))
 
     # Create summary table
@@ -236,13 +329,14 @@ def plot_simulations_2d(
     print(tabulate(table, headers=headers, tablefmt="simple_grid", colalign=("center",)*len(headers)))
 
     # Set up figure and axes
-    fig = plt.figure(figsize=(11, 11))
-    gs = fig.add_gridspec(3, 2, height_ratios=[4, 4, 1])
+    fig = plt.figure(figsize=(9, 6))
+    gs = fig.add_gridspec(2, 3)                 # Changed 2,2 to 2,3     can control width and height ratios 
     ax_init = fig.add_subplot(gs[0, 0], projection='3d')  # initial
-    ax_exact = fig.add_subplot(gs[0, 1], projection='3d')  # exact
-    ax_q1 = fig.add_subplot(gs[1, 0], projection='3d')  # quantum plot first given order
+    ax_exact = fig.add_subplot(gs[1, 0], projection='3d')  # exact
+    ax_q1 = fig.add_subplot(gs[0, 1], projection='3d')  # quantum plot first given order
     ax_q2 = fig.add_subplot(gs[1, 1], projection='3d')  # quantum plot second given order
-    ax_table = fig.add_subplot(gs[2, :])  # table
+    ax_compare = fig.add_subplot(gs[0,2])               # contour plot 
+    ax_compare_zoom = fig.add_subplot(gs[1,2])          # zoomed contour plot
 
     # Determine global z-limits
     z_values = []
@@ -259,7 +353,7 @@ def plot_simulations_2d(
 
     # Plot initial condition
     ax_init.plot_surface(X, Y, results[0][2], cmap='viridis')
-    ax_init.set_title('Initial Condition', fontsize=14)
+    ax_init.set_title('Initial Condition', fontsize=13)
     ax_init.set_zlim(z_min, z_max)
     ax_init.set_xlabel('x')
     ax_init.set_ylabel('y')
@@ -268,7 +362,7 @@ def plot_simulations_2d(
     ax_exact.plot_surface(X, Y, results[0][4], cmap='viridis')
     time_str = str(time)
     if len(time_str) > 4: time_str = time_str[:4]
-    ax_exact.set_title(f'Exact Solution at Time $T = {time_str}$', fontsize=14)
+    ax_exact.set_title(f'Time $T = {time_str}$ (exact)', fontsize=13)
     ax_exact.set_zlim(z_min, z_max)
     ax_exact.set_xlabel('x')
     ax_exact.set_ylabel('y')
@@ -279,43 +373,98 @@ def plot_simulations_2d(
         y = results[i][1]
         X, Y = np.meshgrid(x, y, indexing="ij")
         Z = results[i][5].real if sim_type=="sv" else results[i][3]
-        ax.plot_surface(X, Y, Z, cmap='plasma')
-        if sim_type == "sv":
-            ax.set_title(rf'Statevector at Time $T = {time_str}$ (Order {orders[i]})', fontsize=14)
-        else:
-            ax.set_title(rf'Measurements at Time $T = {time_str}$ (Order {orders[i]})', fontsize=14)
+        ax.plot_surface(X, Y, Z, cmap='viridis')                            # Changed from plasma 
+        ax.set_title(rf'Time $T = {time_str}$ (ord{orders[i]})', fontsize=13)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlim(z_min, z_max)
 
-    # Table
-    ax_table.axis('off')
-    tbl = ax_table.table(cellText=table,
-                         colLabels=['', f'spatial qubits', 'total qubits', f'error', 'success rate', '1-qubit gates', 'CNOT gates'],
-                         loc='center')
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(12)
-    tbl.scale(1.2, 1.6)
-    _ = [cell.set_text_props(ha='center', va='center') for cell in tbl.get_celld().values()]
-    ax_table.set_title('Data Table', fontsize=14)
+    
+    def interp_to_grid(x_src, y_src, Z_src, x_tgt, y_tgt):
+        """Interpolate Z(x_src,y_src) onto target tensor grid (x_tgt,y_tgt)."""
+        interp = RegularGridInterpolator((x_src, y_src), Z_src, bounds_error=False, fill_value=np.nan)
+        Xg, Yg = np.meshgrid(x_tgt, y_tgt, indexing="ij")
+        pts = np.stack([Xg.ravel(), Yg.ravel()], axis=-1)
+        Zg = interp(pts).reshape(Xg.shape)
+        return Xg, Yg, Zg
 
-    # Set super title
-    if diff_coef == 0:
-        super_title = rf"2D Advection Simulation with Advection Speeds $c_x = {adv_speed_x:.3g}, \; c_y = {adv_speed_y:.3g}$"
-    elif adv_speed_x == 0 and adv_speed_y == 0:
-        super_title = rf"2D Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3g}$"
-    else:
-        super_title = (
-        rf"2D Advection–Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef:.3g}$"
-        f"\nand Advection Speeds $c_x = {adv_speed_x:.3g}, c_y = {adv_speed_y:.3g}$"
+    # pick a common grid (use the finest resolution)
+    x0, y0 = results[0][0], results[0][1]
+    x1, y1 = results[1][0], results[1][1]
+    x_common = x0 if len(x0) >= len(x1) else x1
+    y_common = y0 if len(y0) >= len(y1) else y1
+    X, Y = np.meshgrid(x_common, y_common, indexing="ij")
+
+    # pull surfaces
+    Z_exact0 = results[0][4]  # exact for run 0
+    Z_0 = results[0][5].real if sim_type == "sv" else results[0][3]
+    Z_1 = results[1][5].real if sim_type == "sv" else results[1][3]
+
+    # interpolate all onto (x_common, y_common)
+    _, _, Z_exact = interp_to_grid(x0, y0, Z_exact0, x_common, y_common)
+    _, _, Z0g     = interp_to_grid(x0, y0, Z_0,     x_common, y_common)
+    _, _, Z1g     = interp_to_grid(x1, y1, Z_1,     x_common, y_common)
+
+    # levels based on common-grid data
+    z_min_c = np.nanmin([Z_exact, Z0g, Z1g])
+    z_max_c = np.nanmax([Z_exact, Z0g, Z1g])
+    levels = np.linspace(z_min_c, z_max_c, 6)
+
+    def draw_contours(ax_):
+        ax_.contour(X, Y, Z_exact, levels=levels, colors="black", linewidths=1)
+        ax_.contour(X, Y, Z0g,     levels=levels, colors="red",   linewidths=1, linestyles="--")
+        ax_.contour(X, Y, Z1g,     levels=levels, colors="blue",  linewidths=1, linestyles=":")
+        ax_.set_xlabel("x")
+        ax_.set_ylabel("y")
+
+    draw_contours(ax_compare)
+    ax_compare.set_title("Contour Comparison", fontsize=13)
+
+    # legend via proxy artists since contour doesn't support labels
+    handles = [
+        Line2D([0],[0], color="black", lw=1, linestyle="-",  label="exact"),
+        Line2D([0],[0], color="red",   lw=1, linestyle="--", label=f"ord{orders[0]}"),
+        Line2D([0],[0], color="blue",  lw=1, linestyle=":",  label=f"ord{orders[1]}"),
+    ]
+    ax_compare.legend(handles=handles, loc="lower left", fontsize=9)
+    ax_compare_zoom.legend(handles=handles, loc="upper right", fontsize=9)
+
+    # --- zoom contour plot ---
+    draw_contours(ax_compare_zoom)
+    ax_compare_zoom.set_title("Zoomed Contours", fontsize=13)
+
+    # auto center zoom around maximum absolute error
+    err = np.abs(Z0g - Z_exact)
+    idx = np.nanargmax(err)
+    i0, j0 = np.unravel_index(idx, err.shape)
+    xc = x_common[i0]
+    yc = y_common[j0]
+
+    x_range = x_common.max() - x_common.min()
+    y_range = y_common.max() - y_common.min()
+    half_wx = 0.5 * zoom_window_frac * x_range
+    half_wy = 0.5 * zoom_window_frac * y_range
+
+    zx1 = max(x_common.min(), xc - half_wx)
+    zx2 = min(x_common.max(), xc + half_wx)
+    zy1 = max(y_common.min(), yc - half_wy)
+    zy2 = min(y_common.max(), yc + half_wy)
+
+    ax_compare_zoom.set_xlim(zx1, zx2)
+    ax_compare_zoom.set_ylim(zy1, zy2)
+
+    # draw rectangle on the full contour plot to show zoom region
+    rect = patches.Rectangle(
+        (zx1, zy1), zx2 - zx1, zy2 - zy1,
+        fill=False, ec="0.3", lw=1
     )
-        #super_title = rf"2D Advection–Diffusion Simulation with Diffusion Coefficient $\nu={diff_coef}$ and Advection Speeds $c_x = {adv_speed_x}, \; c_y = {adv_speed_y}$"
-    fig.suptitle(super_title, fontsize=16)
-    plt.tight_layout()
+    ax_compare.add_patch(rect)
+
+    plt.tight_layout()               
     plt.show()
 
 
-def run_examples(examples = [gaussian, sine_sum, wave_pack, bump, rec, gaussian_2d, sine_squared_2d], sim_type="sv", shots=10**6):
+def run_examples(examples = [gaussian, sine_sum, wave_pack, rec, gaussian_2d, sine_squared_2d], sim_type="sv", shots=10**4):
     """ Run and plot a predefined collection of example simulations.
 
     This function dispatches to either `plot_simulations` (1D) or `plot_simulations_2d` (2D) depending on the example.
@@ -323,7 +472,7 @@ def run_examples(examples = [gaussian, sine_sum, wave_pack, bump, rec, gaussian_
 
     Args:
     examples: List of initial-condition functions to simulate. Each entry must be one of:
-              {gaussian, sine_sum, wave_pack, bump, rec, gaussian_2d, sine_squared_2d}.
+              {gaussian, sine_sum, wave_pack, rec, gaussian_2d, sine_squared_2d}.
     sim_type: Simulation type passed to the plotting routines. 
               Note that for 2D examples, sim_type="both" is not supported. instead, both types will be run sequentially.
     shots: Number of measurement shots used for example runs if sim_type = "meas".
@@ -331,30 +480,27 @@ def run_examples(examples = [gaussian, sine_sum, wave_pack, bump, rec, gaussian_
 
     for example in examples:
 
-        if example not in [gaussian, sine_sum, wave_pack, bump, rec, gaussian_2d, sine_squared_2d]:
+        if example not in [gaussian, sine_sum, wave_pack, rec, gaussian_2d, sine_squared_2d, mixed_wave_2d]:
             raise ValueError(f"Example {example} not recognized.")
         
         if example == gaussian:
             # plot_simulations(num_qubits_order=[(7,4),(6,6)], time=2, adv_speed=0, diff_coef=0.02, init_f=Gaussian, shots = shots, sim_type=sim_type)
-            plot_simulations(num_qubits_order=[(8,2),(6,6),(9,2),(7,6)], time=4, adv_speed=1, diff_coef=0, domain_length=4, init_f=gaussian, shots = shots, tolerance=1e-8, sim_type=sim_type)
+            plot_simulations(num_qubits_order=[(9,2),(6,6),(8,2),(7,6)], time=4, adv_speed=1, diff_coef=0, domain_length=4, init_f=gaussian, shots = shots, tolerance=1e-6, sim_type=sim_type, window_position="upper right", window_width_frac=0.03, window_height_frac=0.06)
         
         elif example == sine_sum:
-            plot_simulations(num_qubits_order=[(8,6),(6,14)], time=0.5, adv_speed=0, diff_coef=0.1, domain_length=4, init_f=sine_sum, shots=shots, tolerance=1e-8, sim_type = sim_type)
+            plot_simulations(num_qubits_order=[(9,2),(8,4),(7,6)], time=0.3, adv_speed=0, diff_coef=0.02, domain_length=4, init_f=sine_sum, shots=shots, tolerance=1e-6, sim_type = sim_type, window_position="lower left", window_width_frac=0.02, window_height_frac=0.09, legend_loc="upper right")
         
         elif example == wave_pack:
-            plot_simulations(num_qubits_order=[(10,6),(8,14)], time=1, adv_speed=1, diff_coef=0, domain_length=4, init_f=wave_pack, shots=shots, tolerance=1e-8, sim_type = sim_type)
-        
-        elif example == bump:
-            plot_simulations(num_qubits_order=[(9,2),(7,6)], time=0.6, adv_speed=2, diff_coef=0, domain_length=4, init_f=bump, shots=shots, tolerance=1e-8, sim_type = sim_type)
+            plot_simulations(num_qubits_order=[(9,6),(8,6), (6,14), (7,14)], time=1.5, adv_speed=1, diff_coef=10**(-3), domain_length=4, init_f=wave_pack, shots=shots, tolerance=1e-8, sim_type = sim_type, window_position="lower center", window_width_frac=0.07, window_height_frac=1)
         
         elif example == rec:
-            plot_simulations(num_qubits_order=[(8,2),(7,6)], time=1, adv_speed=1, diff_coef=0.02, domain_length=4, init_f=rec, shots=shots, tolerance=1e-8, sim_type=sim_type)
+            plot_simulations(num_qubits_order=[(8,2),(7,6)], time=1, adv_speed=1, diff_coef=0.02, domain_length=4, init_f=rec, shots=shots, tolerance=1e-8, sim_type=sim_type, window_position="lower center", window_width_frac=0.04, window_height_frac=0.1)
         
         elif example == gaussian_2d:
             if sim_type == 'both':
                 sim_type = 'sv'
-                plot_simulations_2d(num_qubits_order=[(7,2),(6,4)], time=0.5, adv_speed_x=0, adv_speed_y=0, diff_coef=0.05, init_f=gaussian_2d, shots=shots, tolerance=1e-6, sim_type="meas")
-            plot_simulations_2d(num_qubits_order=[(7,2),(6,4)], time=0.5, adv_speed_x=0, adv_speed_y=0, diff_coef=0.05, init_f=gaussian_2d, shots=shots, tolerance=1e-6, sim_type=sim_type)
+                plot_simulations_2d(num_qubits_order=[(8,2),(6,6)], time=0.8, adv_speed_x=3/2, adv_speed_y=2/3, diff_coef=0.0, init_f=gaussian_2d, shots=shots, tolerance=1e-6, sim_type="meas", contour_plot=True, zoom_window_frac=0.1)
+            plot_simulations_2d(num_qubits_order=[(8,2),(6,6)], time=0.8, adv_speed_x=3/2, adv_speed_y=2/3, diff_coef=0.0, init_f=gaussian_2d, shots=shots, tolerance=1e-6, sim_type=sim_type, contour_plot=True, zoom_window_frac=0.1)
         
         elif example == sine_squared_2d:
             if sim_type == 'both':
@@ -362,5 +508,20 @@ def run_examples(examples = [gaussian, sine_sum, wave_pack, bump, rec, gaussian_
                 plot_simulations_2d(num_qubits_order=[(6,2),(5,4)], time=0.5, adv_speed_x=1, adv_speed_y=1, diff_coef=0.1, init_f=sine_squared_2d, shots=shots, tolerance=1e-6, sim_type='meas')
             plot_simulations_2d(num_qubits_order=[(6,2),(5,4)], time=0.5, adv_speed_x=1, adv_speed_y=1, diff_coef=0.1, init_f=sine_squared_2d, shots=shots, tolerance=1e-6, sim_type=sim_type)
 
-run_examples()
+        elif example == mixed_wave_2d:   
+            if sim_type == 'both':
+                sim_type = 'sv'
+                plot_simulations_2d(num_qubits_order=[(8,2),(6,6)], time=0.4, adv_speed_x=0.5, adv_speed_y=1, diff_coef=0.2, init_f=mixed_wave_2d, shots=shots, tolerance=1e-6, sim_type='meas', contour_plot=True, zoom_window_frac=0.04)
+            plot_simulations_2d(num_qubits_order=[(8,2),(6,6)], time=0.4, adv_speed_x=0.5, adv_speed_y=1, diff_coef=0.2, init_f=mixed_wave_2d, shots=shots, tolerance=1e-6, sim_type=sim_type, contour_plot=True, zoom_window_frac=0.04)
+
+
+# Run the 1d examples
+run_examples(examples = [gaussian, sine_sum, wave_pack, rec], sim_type="sv")
+
+# Run the 2d examples - these are much more time consuming. 
+# run_examples(examples = [gaussian_2d, sine_squared_2d, mixed_wave_2d], sim_type="sv")
+
+ 
+
+
 
