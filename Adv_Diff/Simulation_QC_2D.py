@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
 from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
+from qiskit_aer.primitives import SamplerV2
 from typing import Callable
 from Adv_Diff import Adv_Diff_QC
 from Adv_Diff.Angles_QSVT import jacobi_anger_exp_angles, jacobi_anger_squared_exp_angles, combined_exp_angles
@@ -114,9 +115,15 @@ def simulate_adv_diff_2d(
     diff_scale = 0.95
 
     # Construct registers and circuit
-    qr_anc, cr_anc = QuantumRegister(num_anc), ClassicalRegister(num_anc)
-    qr, cr = QuantumRegister(2 * num_qubits), ClassicalRegister(2 * num_qubits)
-    qc = QuantumCircuit(qr_anc, qr, cr_anc, cr)
+    
+    qr_anc = QuantumRegister(num_anc)
+    qr = QuantumRegister(2 * num_qubits)
+    qc = QuantumCircuit(qr_anc, qr)
+
+    # A second quantum circuit to compute gate counts without state preparation 
+    qr1_anc = QuantumRegister(num_anc)
+    qr1= QuantumRegister(2 * num_qubits)
+    qc1 = QuantumCircuit(qr1_anc, qr1)
 
     # Spatial grid and normalized initial state preparation
     x = np.linspace(0, domain_length, num_points, endpoint=False)
@@ -125,9 +132,11 @@ def simulate_adv_diff_2d(
     init_values = init_f(X, Y) 
     if not np.all(init_values >= 0):
         sys.exit("Error: initial function must be non-negative on the domain")   
-    norm_init = np.linalg.norm(init_values)       
+    norm_init = np.linalg.norm(init_values) 
+     
     init_normalized = init_values / norm_init
-    qc.prepare_state(Statevector(init_normalized.flatten()), qr) 
+    print(np.linalg.norm(init_normalized))    
+    qc.initialize(Statevector(init_normalized.flatten()), qr)                         # Changed from prepare_state to initialize
 
     # Generate and append QSVT angle sequences for QSVT evolution
     print(f"-- ANGLE SEQUENCES --")
@@ -144,13 +153,26 @@ def simulate_adv_diff_2d(
             return Adv_Diff_QC.qsvt(num_qubits, angle_seq_odd, angle_seq_even, method, order)
 
     qsvt_x = build_qsvt(method_x, M_adv_x)  # QSVT evolution in x direction
-    qc.append(qsvt_x, qr_anc[:num_anc - 1] + qr[:num_qubits])
+    qc1.append(qsvt_x, qr1_anc[:num_anc - 1] + qr1[:num_qubits])
 
-    qc.mcx(qr_anc[:num_anc - 1], qr_anc[num_anc - 1], ctrl_state = (num_anc - 1) * '0')   # Composition trick 
-    qc.x(qr_anc[num_anc - 1])
+    qc1.mcx(qr1_anc[:num_anc - 1], qr1_anc[num_anc - 1], ctrl_state = (num_anc - 1) * '0')   # Composition trick 
+    qc1.x(qr1_anc[num_anc - 1])
 
     qsvt_y = build_qsvt(method_y, M_adv_y)  # QSVT evolution in y direction
-    qc.append(qsvt_y, qr_anc[:num_anc - 1] + qr[num_qubits:])
+    qc1.append(qsvt_y, qr1_anc[:num_anc - 1] + qr1[num_qubits:])
+
+    # Printing gate counts and circuit depth (without state preparation)
+    complexity = None
+    if report_complexity:
+        tqc = transpile(qc1, basis_gates=["u", "cx"])    # Generic 1Q and CNOT gates
+        gts = tqc.count_ops()
+        gate_1q = gts['u']
+        gate_2q = gts['cx']                
+        print(f"\n-- COMPLEXITY-- \nTotal: {gate_1q + gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
+        complexity = [gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()]
+
+    # Composing the QSVT circuit and the state preparation circuit
+    qc.append(qc1, qr_anc[:] + qr[:])
 
     # Fourier approximation
     fourier_result = None
@@ -161,6 +183,7 @@ def simulate_adv_diff_2d(
         else:  # pure advection
             fourier_result = init_f((X - adv_speed_x * time) % domain_length, (Y - adv_speed_y * time) % domain_length)
 
+    
     # Statevector simulation
     statevec_result = None
     if sim_type != "meas":
@@ -169,9 +192,13 @@ def simulate_adv_diff_2d(
         qc_sv = qc.copy()
         qc_sv.save_statevector()
         qc_sv = transpile(qc_sv, simulator)
+        gphase = qc_sv.global_phase                           # Global phase
         result = simulator.run(qc_sv).result()
         sv_data = result.get_statevector(qc_sv)
         statevec_result = np.asarray(sv_data).reshape(num_points, num_points, 2 ** num_anc)[:, :, 0]
+        # Reversing the global phase introduced by state preparation and the transpiler 
+        statevec_result = statevec_result*np.exp(-1j*gphase)   
+        statevec_result = statevec_result.real
 
         if sim_type != "both":
             success_rate = np.linalg.norm(statevec_result) ** 2
@@ -182,14 +209,15 @@ def simulate_adv_diff_2d(
 
     # Measurement simulation
     meas_result  = None
-    complexity = None
+    
     if sim_type != "sv":
-        qc.measure(qr_anc,cr_anc)
-        qc.measure(qr,cr)
+        qc.measure_all()
         sim = AerSimulator()
         qc_comp = transpile(qc,sim)
-        res = sim.run(qc_comp,shots = shots).result()
-        counts = res.get_counts(0)
+        sampler = SamplerV2()
+        job = sampler.run([qc_comp],shots = shots)
+        result = job.result() 
+        counts = result[0].data.meas.get_counts()
 
         # Postselection
         total_selected = 0
@@ -197,10 +225,10 @@ def simulate_adv_diff_2d(
         select_str = "0" * num_anc
 
         for key in counts:
-            parts = key.split()
-            if parts[1] == select_str:
-                i = int(parts[0][:num_qubits], 2)
-                j = int(parts[0][num_qubits:], 2)
+            if key[-num_anc:] == select_str:
+                ind = key[:-num_anc]
+                i = int(ind[:num_qubits], 2)
+                j = int(ind[num_qubits:], 2)
                 meas_result[i, j] = np.sqrt(counts[key] / shots) * norm_init * 2 ** 2
                 total_selected += counts[key]
         # Reverse scaling factors
@@ -209,15 +237,6 @@ def simulate_adv_diff_2d(
 
         success_rate = total_selected / shots
         print(f"\n-- SUCCESS RATE -- \n succes rate of postselection: {success_rate:.4f} ")
-
-    # Printing gate counts and circuit depth
-    if report_complexity:
-        tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
-        gts = tqc.count_ops()
-        gate_1q = gts['u']
-        gate_2q = gts['cx']                  
-        print(f"\n-- COMPLEXITY-- \nTotal: {gate_1q + gate_2q}\nCircuit depth after transpiling:{tqc.depth()}\n")
-        complexity = [gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()]
 
     # Max error
     max_err = []

@@ -1,9 +1,10 @@
 import numpy as np
 import sys
 import matplotlib.pyplot as plt
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile
+from qiskit import QuantumCircuit, QuantumRegister, transpile
 from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
+from qiskit_aer.primitives import SamplerV2
 from tabulate import tabulate
 from typing import Callable
 from Adv_Diff import Adv_Diff_QC
@@ -122,25 +123,42 @@ def simulate_adv_diff(
         print(f"--- RESULTS FOR ORDER {order} AT TIME {times[i]} ---\n")    
 
         # Construct registers and circuit
-        qr_anc, cr_anc = QuantumRegister(num_anc), ClassicalRegister(num_anc)
-        qr, cr = QuantumRegister(num_qubits), ClassicalRegister(num_qubits)
-        qc = QuantumCircuit(qr_anc, qr, cr_anc, cr)
+        qr_anc = QuantumRegister(num_anc)
+        qr = QuantumRegister(num_qubits)
+        qc = QuantumCircuit(qr_anc, qr)
+
+        # A secondary quantum circuit to measure gate counts without state preparation included
+        qr1_anc = QuantumRegister(num_anc)
+        qr1 = QuantumRegister(num_qubits)
+        qc1 = QuantumCircuit(qr1_anc, qr1)
 
         # State preparation 
-        qc.prepare_state(Statevector(init_normalized), qr)
+        qc.initialize(Statevector(init_normalized), qr)                     # prepare_state changed to initialize due to a bug in the 2d simulation
 
         # Generate and append QSVT angle sequences for QSVT evolution
         print(f"-- ANGLE SEQUENCES --")
         if method == "pure_adv": 
             angle_seq_cos, angle_seq_sin = jacobi_anger_exp_angles(M_adv[i], adv_scale, tolerance)
-            qc.append(Adv_Diff_QC.qsvt(num_qubits, angle_seq_cos, angle_seq_sin, method, order), qr_anc[:] + qr[:])
+            qc1.append(Adv_Diff_QC.qsvt(num_qubits, angle_seq_cos, angle_seq_sin, method, order), qr1_anc[:] + qr1[:])
         elif method == "pure_diff": 
             angle_seq_even = jacobi_anger_squared_exp_angles(M_diff[i], diff_scale, tolerance)
-            qc.append(Adv_Diff_QC.qsvt_single(num_qubits, angle_seq_even, order), qr_anc[:] + qr[:])
+            qc1.append(Adv_Diff_QC.qsvt_single(num_qubits, angle_seq_even, order), qr1_anc[:] + qr1[:])
         else:
             angle_seq_even, angle_seq_odd = combined_exp_angles(tolerance, M_diff[i], M_adv[i])
-            qc.append(Adv_Diff_QC.qsvt(num_qubits, angle_seq_odd, angle_seq_even, method, order), qr_anc[:] + qr[:])
+            qc1.append(Adv_Diff_QC.qsvt(num_qubits, angle_seq_odd, angle_seq_even, method, order), qr1_anc[:] + qr1[:])
 
+        # Printing gate counts and circuit depth without the cost of state preparation
+        if report_complexity:
+            tqc = transpile(qc1, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
+            gts = tqc.count_ops()                           
+            gate_1q = gts["u"]
+            gate_2q = gts["cx"]                             
+            complexities.append([gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()])                   
+            print(f"\n-- COMPLEXITY-- Total: {gate_1q + gate_2q}\nCircuit depth after transpiling:{tqc.depth()}")
+
+        # Appending the QSVT circuit to the state preparation circuit
+        qc.append(qc1,qr_anc[:] +  qr[:])
+        
         # Fourier approximation
         if compute_exact:
             fourier_result = fourier_func(x, times[i], adv_speed, diff_coeff)
@@ -153,32 +171,36 @@ def simulate_adv_diff(
             qc_sv = qc.copy()
             qc_sv.save_statevector()
             qc_sv = transpile(qc_sv, simulator)
+            gphase = qc_sv.global_phase 
             result = simulator.run(qc_sv).result()
             sv_data = result.get_statevector(qc_sv)
             statevec_result = np.asarray(sv_data).reshape(2 ** num_qubits, 2 ** num_anc)[:, 0]
             if sim_type != "both":
                 success_rate_sv = np.linalg.norm(statevec_result) ** 2
                 success_rates.append(success_rate_sv)
-            statevec_result *= 2 * norm_init/(adv_scale if method == "pure_adv" else 2 * diff_scale if method == "pure_diff" else 1)    
-            statevec_results.append(statevec_result)
+            # Reversing the global phase and rescaling 
+            statevec_result *= np.exp(-1j*gphase)*2 * norm_init/(adv_scale if method == "pure_adv" else 2 * diff_scale if method == "pure_diff" else 1)
+            statevec_results.append(statevec_result.real)
 
         # Measurement simulation
         if sim_type != "sv":
-            qc.measure(qr_anc, cr_anc)
-            qc.measure(qr, cr)
-            sim = AerSimulator()
-            qc_comp = transpile(qc, sim)
-            res = sim.run(qc_comp, shots = shots).result()
-            counts = res.get_counts(0)
+            qc.measure_all() 
+            sim = AerSimulator(method = 'automatic')
+            qc_comp = transpile(qc, sim) 
+            sampler = SamplerV2()
+            job = sampler.run([qc_comp],shots = shots)
+            result = job.result() 
+            print(sim.options.method)
+
+            counts = result[0].data.meas.get_counts()
 
             # Postselection
             total_selected = 0        
             meas_result = np.zeros(2 ** num_qubits)
             select_str = "0" * num_anc
             for key in counts:
-                parts = key.split()
-                if parts[1] == select_str:
-                    idx = int(parts[0], 2)
+                if key[-num_anc:] ==  select_str:
+                    idx = int(key[:-num_anc], 2)
                     meas_result[idx] = np.sqrt(counts[key]/shots)*2
                     meas_result[idx] *= norm_init / (adv_scale if method=="pure_adv" else 2 * diff_scale if method=="pure_diff" else 1)  # Reverse scaling factors
                     total_selected += counts[key] 
@@ -187,14 +209,6 @@ def simulate_adv_diff(
             success_rates.append(success_rate)
             print(f"\n-- SUCCESS RATE -- \nsucces rate of postselection: {success_rate:.4f}\n ")
 
-        # Printing gate counts and circuit depth
-        if report_complexity:
-            tqc = transpile(qc, basis_gates=["u", "cx"])    # Generic 1Q gate and CNOT
-            gts = tqc.count_ops()                           
-            gate_1q = gts["u"]
-            gate_2q = gts["cx"]                             
-            complexities.append([gate_1q, gate_2q, gate_1q + gate_2q, tqc.depth()])                   
-            print(f"\n-- COMPLEXITY-- Total: {gate_1q + gate_2q}\nCircuit depth after transpiling:{tqc.depth()}")
 
         # Max error
         if compute_exact:
@@ -243,7 +257,7 @@ def simulate_adv_diff(
             if sim_type == "meas": headers += ["meas max error"]
             else: headers += ["sv max error"]
         headers += ["success rate"]
-        if sim_type != "sv" and report_complexity: headers += ["1-qubit gates", "2-qubit gates"]
+        if report_complexity: headers += ["1-qubit gates", "2-qubit gates"]        # Removed: if sim_type != "sv" and
 
         print(tabulate(table, headers=headers, tablefmt="simple_grid", colalign=("center",)*len(headers)))
 
